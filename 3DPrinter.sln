@@ -1,0 +1,22 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.30114.105
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "3DPrinter", "3DPrinter\3DPrinter.csproj", "{D021F4B3-7FA6-40A9-B5D2-A9929E0B5E4A}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{D021F4B3-7FA6-40A9-B5D2-A9929E0B5E4A}.Debug|x64.ActiveCfg = Debug|x64
+		{D021F4B3-7FA6-40A9-B5D2-A9929E0B5E4A}.Debug|x64.Build.0 = Debug|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {681908AA-9EEA-40EC-820D-7053C045DC42}
+	EndGlobalSection
+EndGlobal
