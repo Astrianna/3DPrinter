@@ -22,6 +22,8 @@ using System.Runtime.CompilerServices;
 using System.Security.Cryptography.X509Certificates;
 using Sandbox.Game.WorldEnvironment.Modules;
 using System.Diagnostics;
+using System.Text.RegularExpressions;
+using Sandbox.Game.Screens.Helpers;
 
 namespace IngameScript
 {
@@ -31,38 +33,13 @@ namespace IngameScript
         // Written (poorly) by Astrianna - 2020
 
         // TODO
-        // add save/load system for when server restarts
-        // finish arguments to change positions, modes, start, stop, etc
-        // add mode for welding, grinding is the current default and only mode
-        
-        public Program()
-        {
-            Runtime.UpdateFrequency = UpdateFrequency.Update100;
-        }
+        // setup LCD menu/output
 
-        // work area
-        int maxX = 20;
-        int maxY = 20;
-        int maxZ = 20;
-        int minX = 0;
-        int minY = 0;
-        int minZ = 0;
+        MyIni ini = new MyIni();
+        MyIni CustomData = new MyIni();
+        MyIniParseResult result;
 
-        // starting coordinates
-        double xstart = 0;// default 0
-        double ystart = 0;// default 0, even numbers only
-        double zstart = 20;// default 20
-        bool returnAfterDone = true; // returns to maxZ, minY, minX when job is completed
-        
-        // piston and tool settings
-        float maxMovementSpeed = 5; // max speed while changing positions
-        float maxToolSpeed = .5f; // max speed of tool while in auto mode
-        int toolLength = 10; // length of tool in blocks
-//        string mode = "grind"; // "grind" or "weld"
-        bool autoMode = false;
-        bool firstrun = true;
-        
-        // other variables
+        // declare variables before config
         string xdir;
         string ydir;
         string zdir;
@@ -76,6 +53,55 @@ namespace IngameScript
         double getxposmerge;
         double getypos;
         double getzpos;
+        int maxX;
+        int maxY;
+        int maxZ;
+        int minX;
+        int minY;
+        int minZ;
+        double xpause;
+        double ypause;
+        double zpause;
+        bool returnAfterDone;
+        float maxMovementSpeed;
+        float maxToolSpeed;
+        int toolLength;
+        string mode;
+        bool autoMode;
+        bool firstrun;
+
+        public Program()
+        {
+            Runtime.UpdateFrequency = UpdateFrequency.Update100;
+            ini.TryParse(Storage);
+            // xyz starting position
+            xtar = ini.Get("3DPrinter", "xtar").ToDouble(0);  
+            ytar = ini.Get("3DPrinter", "ytar").ToDouble(0); // even numbers only
+            ztar = ini.Get("3DPrinter", "ztar").ToDouble(20);
+
+            xpos = ini.Get("3DPrinter", "xpos").ToDouble(0);
+            ypos = ini.Get("3DPrinter", "ypos").ToDouble(0);
+            zpos = ini.Get("3DPrinter", "zpos").ToDouble(20);
+            xposmerge = ini.Get("3DPrinter", "xposmerge").ToDouble(0);
+            xdir = ini.Get("3DPrinter", "xdir").ToString("forward");
+            ydir = ini.Get("3DPrinter", "ydir").ToString("right");
+            zdir = ini.Get("3DPrinter", "zdir").ToString("down");
+            // work area
+            maxX = ini.Get("3DPrinter", "maxX").ToInt32(20);
+            maxY = ini.Get("3DPrinter", "maxY").ToInt32(20);
+            maxZ = ini.Get("3DPrinter", "maxZ").ToInt32(20);
+            minX = ini.Get("3DPrinter", "minX").ToInt32(0);
+            minY = ini.Get("3DPrinter", "minY").ToInt32(0);
+            minZ = ini.Get("3DPrinter", "minZ").ToInt32(0);
+            // piston and tool settings
+            returnAfterDone = ini.Get("3DPrinter", "returnAfterDone").ToBoolean(true); // returns to maxZ, minY, minX when job is completed
+            maxMovementSpeed = ini.Get("3DPrinter", "maxMovementSpeed").ToSingle(5f); // max speed while changing positions
+            maxToolSpeed = ini.Get("3DPrinter", "maxToolSpeed").ToSingle(0.5f); // max speed of tool while in auto mode
+            toolLength = ini.Get("3DPrinter", "toolLength").ToInt32(10); // length of tool in blocks
+            mode = ini.Get("3DPrinter", "mode").ToString("grinding"); // "grinding" or "welding"
+            autoMode = ini.Get("3DPrinter", "autoMode").ToBoolean(false);
+            firstrun = ini.Get("3DPrinter", "firstrun").ToBoolean(true);
+        }
 
         // block declarations
         IMySensorBlock Sensor;
@@ -119,43 +145,105 @@ namespace IngameScript
             {
                 firstrun = false;
                 GetBlocks();
-                PistonX.ApplyAction("OnOff_On");
-                PistonY.ApplyAction("OnOff_On");
-                PistonZ.ApplyAction("OnOff_On");
-                if (autoMode) Sensor.ApplyAction("OnOff_On");
-                if (autoMode) PistonX.Velocity = maxToolSpeed;
-                xdir = "forward";
-                ydir = "right";
-                zdir = "down";
-                xtar = xstart;
-                ytar = ystart;
-                ztar = zstart;
+                PistonX.Enabled = true;
+                PistonY.Enabled = true;
+                PistonZ.Enabled = true;
             }
 
             if (argument.Equals("start", StringComparison.OrdinalIgnoreCase))
             {
-
+                PistonX.Enabled = true;
+                PistonY.Enabled = true;
+                PistonZ.Enabled = true;
+                if (xpause != xpos || ypause != ypos || zpause != zpos)
+                {
+                    Echo("Position changed while paused\nOh, geez, where was I?");
+                    PistonX.Velocity = maxToolSpeed;
+                }
             }
+
             if (argument.Equals("stop", StringComparison.OrdinalIgnoreCase))
             {
-
+                PistonX.Enabled = false;
+                PistonY.Enabled = false;
+                PistonZ.Enabled = false;
+                xpause = xpos;
+                ypause = ypos;
+                zpause = zpos;
             }
+
             if (argument.Equals("mode", StringComparison.OrdinalIgnoreCase))
             {
+                if (mode == "grinding")
+                {
+                    mode = "welding";
+                    zdir = "up";
+                }
 
+                else if (mode == "welding")
+                {
+                    mode = "grinding";
+                    zdir = "down";
+                }
             }
+
+            if (argument.Equals("return", StringComparison.OrdinalIgnoreCase))
+            {
+                returnAfterDone = !returnAfterDone;
+            }
+
             if (argument.Equals("home", StringComparison.OrdinalIgnoreCase))
             {
-
+                if (mode == "grinding") ztar = maxZ;
+                if (mode == "welding") ztar = minZ;
+                ytar = minY;
+                xtar = minX;
             }
+
             if (argument.Equals("auto", StringComparison.OrdinalIgnoreCase))
             {
-
+                autoMode = !autoMode;
+                if (autoMode) PistonX.Velocity = maxToolSpeed;
             }
+
             if (argument.StartsWith("goto", StringComparison.OrdinalIgnoreCase))
             {
+                
+                string[] xyz = argument.Split(new char[] { ',', ' ' } ); 
+                if (xyz.Length == 4)
+                {
+                    int x, y, z;
+                    if (int.TryParse(xyz[1], out x) && int.TryParse(xyz[2], out y) && int.TryParse(xyz[3], out z))
+                    {
 
+                        if (x >= minX && x <= maxY && y >= minY && y <= maxY && z >= minZ && z <= maxZ)
+                        {
+                            autoMode = false;
+                            xtar = x;
+                            ytar = y;
+                            ztar = z;
+                        }
+                    }
+                }
             }
+            if (Me.CustomData == "")
+            {
+                Me.CustomData = "[3DPrinter]\n; Work area dimentions:\nmaxX = 20\nmaxY = 20\nmaxZ = 20\nminX = 0\nminY = 0\nminZ = 0\n; Mode: grinding or welding\n mode = grinding\n; Tool Length in number of blocks(default:10)\noolLength = 10\n; Return to home position?\nreturnAfterDone=true\n; Fastest pistons can move(0-5)\nmaxMovementSpeed=5.0f\n; Max piston speed during Auto Mode\n; (recommended: 0.5 for grinding, 0.2 for welding)\nmaxToolSpeed=0.5f";
+            }
+            else
+            if (!CustomData.TryParse(Me.CustomData, out result)) throw new Exception(result.ToString());
+
+            maxX = CustomData.Get("3DPrinter", "maxX").ToInt32(20);
+            maxY = CustomData.Get("3DPrinter", "maxY").ToInt32(20);
+            maxZ = CustomData.Get("3DPrinter", "maxZ").ToInt32(20);
+            minX = CustomData.Get("3DPrinter", "minX").ToInt32(0);
+            minY = CustomData.Get("3DPrinter", "minY").ToInt32(0);
+            minZ = CustomData.Get("3DPrinter", "minZ").ToInt32(0);
+            returnAfterDone = ini.Get("3DPrinter", "returnAfterDone").ToBoolean(true);
+            maxMovementSpeed = ini.Get("3DPrinter", "maxMovementSpeed").ToSingle(5f);
+            maxToolSpeed = ini.Get("3DPrinter", "maxToolSpeed").ToSingle(0.5f);
+            toolLength = ini.Get("3DPrinter", "toolLength").ToInt32(10);
+            mode = ini.Get("3DPrinter", "mode").ToString("grinding");
 
             string ERR_TXT = "";
 
@@ -163,10 +251,13 @@ namespace IngameScript
             getxposmerge = getPos(MergeX);
             getypos = getPos(MergeY);
             getzpos = getPos(MergeZ);
-            if (getxposmerge != -1) xposmerge = getxposmerge;
+            if (getxposmerge != -1)
+            {
+                xposmerge = getxposmerge;
+                xpos = Math.Round(xposmerge + (PistonX.CurrentPosition - PistonX.MinLimit) / 2.5, 1); // X Merge + X Piston
+            }
             if (getypos != -1) ypos = getypos;
             if (getzpos != -1) zpos = getzpos;
-            xpos = Math.Round(xposmerge + (PistonX.CurrentPosition - PistonX.MinLimit) / 2.5, 1); // X Merge + X Piston
 
             // debug, change to LCD later
             Echo("X: " + xpos);
@@ -194,9 +285,9 @@ namespace IngameScript
                     PistonX.Enabled = false; // disable X Piston while anything else is moving
                     if ((ypos == minY && ydir == "left") || (ypos + toolLength == maxY && ydir == "right")) // move z up/down
                     {
-                        if ((zpos == maxZ && zdir == "up") || (zpos == minZ) && zdir == "down") Done(); // done! returning to starting position
-                        else if (zdir == "up") ztar = ztar + 1;
-                        else if (zdir == "down") ztar = ztar - 1;
+                        if ((zpos == maxZ && mode == "welding") || (zpos == minZ) && mode == "grinding") Done(); // done! returning to starting position
+                        else if (mode == "welding") ztar = ztar + 1;
+                        else if (zdir == "grinding") ztar = ztar - 1;
                     }
                     else if ((ypos > minY) || (ypos + toolLength < maxY)) // move y left/right
                     {
@@ -219,8 +310,14 @@ namespace IngameScript
                 else if (ypos != ytar) MoveY();
                 else if (! autoMode) // move X while automode is off
                 {
-                    if (xpos > xtar && xposmerge == minX) PistonX.Velocity = -1 * maxMovementSpeed;
-                    else if (xpos < xtar && xpos < maxX && xposmerge == minX) PistonX.Velocity = maxMovementSpeed;
+                    if (xpos > xtar && xposmerge == minX)
+                    {
+                        PistonX.Velocity = -1 * maxMovementSpeed;
+                    }
+                    else if (xpos < xtar && xpos < maxX)
+                    {
+                        PistonX.Velocity = maxMovementSpeed;
+                    }
                     else if ((xpos > xtar && xposmerge != minX) || (xpos < xtar && xpos < maxX)) MoveX();
                 }
                 // display errors
@@ -241,6 +338,13 @@ namespace IngameScript
                 ytar = minY;
                 xtar = minX;
             }
+            if (zpos == ztar && ypos == ytar && xposmerge == ztar)
+            {
+                PistonX.Enabled = false;
+                PistonY.Enabled = false;
+                PistonZ.Enabled = false;
+
+            }
             autoMode = false;
             Echo("Job Complete");
 
@@ -249,6 +353,7 @@ namespace IngameScript
         {
             if (Merge.IsConnected)
             {
+                Echo("getpos " + Merge);
                 //Find direction that block merges to
                 Matrix mat;
                 Merge.Orientation.GetMatrix(out mat);
@@ -470,6 +575,34 @@ namespace IngameScript
                     }
                 }
             }
+        }
+        public void Save()
+        {
+            ini.Clear();
+            ini.Set("3DPrinter", "xtar", xtar);
+            ini.Set("3DPrinter", "ytar", ytar); 
+            ini.Set("3DPrinter", "ztar", ztar);
+            ini.Set("3DPrinter", "xpos", xpos);
+            ini.Set("3DPrinter", "ypos", ypos);
+            ini.Set("3DPrinter", "zpos", zpos);
+            ini.Set("3DPrinter", "xposmerge", xposmerge);
+            ini.Set("3DPrinter", "xdir", xdir);
+            ini.Set("3DPrinter", "ydir", ydir);
+            ini.Set("3DPrinter", "zdir", zdir);
+            ini.Set("3DPrinter", "maxX", maxX);
+            ini.Set("3DPrinter", "maxY", maxY);
+            ini.Set("3DPrinter", "maxZ", maxZ);
+            ini.Set("3DPrinter", "minX", minX);
+            ini.Set("3DPrinter", "minY", minY);
+            ini.Set("3DPrinter", "minZ", minZ);
+            ini.Set("3DPrinter", "returnAfterDone", returnAfterDone);
+            ini.Set("3DPrinter", "maxMovementSpeed", maxMovementSpeed);
+            ini.Set("3DPrinter", "maxToolSpeed", maxToolSpeed);
+            ini.Set("3DPrinter", "toolLength", toolLength);
+            ini.Set("3DPrinter", "mode", mode);
+            ini.Set("3DPrinter", "autoMode", autoMode);
+            ini.Set("3DPrinter", "firstrun", firstrun);
+            Storage = ini.ToString();
         }
     }
 }
