@@ -33,52 +33,27 @@ namespace IngameScript
         // Written (poorly) by Astrianna - 2020
 
         // TODO
-        // setup LCD menu/output
+        // LCD menu/output
 
         MyIni ini = new MyIni();
         MyIni CustomData = new MyIni();
         MyIniParseResult result;
 
         // declare variables before config
-        string xdir;
-        string ydir;
-        string zdir;
-        double xtar;
-        double ytar;
-        double ztar;
-        double xpos;
-        double ypos;
-        double zpos;
-        double xposmerge;
-        double getxposmerge;
-        double getypos;
-        double getzpos;
-        int maxX;
-        int maxY;
-        int maxZ;
-        int minX;
-        int minY;
-        int minZ;
-        double xpause;
-        double ypause;
-        double zpause;
-        bool returnAfterDone;
-        float maxMovementSpeed;
-        float maxToolSpeed;
-        int toolLength;
-        string mode;
-        bool autoMode;
-        bool firstrun;
+        string xdir, ydir, zdir, mode;
+        double xtar, ytar, ztar, xpos, ypos, zpos, xpause, ypause, zpause, xposmerge, getxposmerge, getypos, getzpos;
+        int maxX, maxY, maxZ, minX, minY, minZ, toolLength;
+        bool returnAfterDone, autoMode, firstrun, manualMove;
+        float maxMovementSpeed, maxToolSpeed, grindingSpeed, weldingSpeed;
 
         public Program()
         {
             Runtime.UpdateFrequency = UpdateFrequency.Update100;
             ini.TryParse(Storage);
             // xyz starting position
-            xtar = ini.Get("3DPrinter", "xtar").ToDouble(0);  
+            xtar = ini.Get("3DPrinter", "xtar").ToDouble(0);
             ytar = ini.Get("3DPrinter", "ytar").ToDouble(0); // even numbers only
             ztar = ini.Get("3DPrinter", "ztar").ToDouble(20);
-
             xpos = ini.Get("3DPrinter", "xpos").ToDouble(0);
             ypos = ini.Get("3DPrinter", "ypos").ToDouble(0);
             zpos = ini.Get("3DPrinter", "zpos").ToDouble(20);
@@ -96,29 +71,22 @@ namespace IngameScript
             // piston and tool settings
             returnAfterDone = ini.Get("3DPrinter", "returnAfterDone").ToBoolean(true); // returns to maxZ, minY, minX when job is completed
             maxMovementSpeed = ini.Get("3DPrinter", "maxMovementSpeed").ToSingle(5f); // max speed while changing positions
-            maxToolSpeed = ini.Get("3DPrinter", "maxToolSpeed").ToSingle(0.5f); // max speed of tool while in auto mode
+            grindingSpeed = ini.Get("3DPrinter", "grindingSpeed").ToSingle(0.5f); // max speed of tool while in grinding mode
+            weldingSpeed = ini.Get("3DPrinter", "weldingSpeed").ToSingle(0.2f); // max speed of tool while in welding mode
             toolLength = ini.Get("3DPrinter", "toolLength").ToInt32(10); // length of tool in blocks
             mode = ini.Get("3DPrinter", "mode").ToString("grinding"); // "grinding" or "welding"
             autoMode = ini.Get("3DPrinter", "autoMode").ToBoolean(false);
             firstrun = ini.Get("3DPrinter", "firstrun").ToBoolean(true);
+            manualMove = ini.Get("3DPrinter", "manualMove").ToBoolean(false);
+            GetBlocks();
         }
 
         // block declarations
         IMySensorBlock Sensor;
-        IMyShipConnector ConnectorX;
-        IMyShipConnector ConnectorY;
-        IMyShipConnector ConnectorZ1;
-        IMyShipConnector ConnectorZ2;
-        IMyShipConnector MoveConX;
-        IMyShipConnector MoveConY;
-        IMyShipConnector MoveConZ1;
-        IMyShipConnector MoveConZ2;
-        IMyPistonBase PistonX;
-        IMyPistonBase PistonY;
-        IMyPistonBase PistonZ;
-        IMyShipMergeBlock MergeX;
-        IMyShipMergeBlock MergeY;
-        IMyShipMergeBlock MergeZ;
+        IMyShipConnector ConnectorX, ConnectorY, ConnectorZ1, ConnectorZ2, MoveConX, MoveConY, MoveConZ1, MoveConZ2;
+        IMyPistonBase PistonX, PistonY, PistonZ;
+        IMyShipMergeBlock MergeX, MergeY, MergeZ;
+
 
         public void GetBlocks() // you didn't change any names, did you?
         {
@@ -141,20 +109,24 @@ namespace IngameScript
 
         public void Main(string argument)
         {
-            if (firstrun) 
+            if (firstrun)
             {
                 firstrun = false;
-                GetBlocks();
+                Sensor.Enabled = false;
                 PistonX.Enabled = true;
                 PistonY.Enabled = true;
                 PistonZ.Enabled = true;
+                manualMove = true;
+                SaveToCustomData();
             }
 
             if (argument.Equals("start", StringComparison.OrdinalIgnoreCase))
             {
+                if (autoMode) Sensor.Enabled = true;
                 PistonX.Enabled = true;
                 PistonY.Enabled = true;
                 PistonZ.Enabled = true;
+
                 if (xpause != xpos || ypause != ypos || zpause != zpos)
                 {
                     Echo("Position changed while paused\nOh, geez, where was I?");
@@ -164,6 +136,7 @@ namespace IngameScript
 
             if (argument.Equals("stop", StringComparison.OrdinalIgnoreCase))
             {
+                Sensor.Enabled = false;
                 PistonX.Enabled = false;
                 PistonY.Enabled = false;
                 PistonZ.Enabled = false;
@@ -174,6 +147,7 @@ namespace IngameScript
 
             if (argument.Equals("mode", StringComparison.OrdinalIgnoreCase))
             {
+
                 if (mode == "grinding")
                 {
                     mode = "welding";
@@ -185,11 +159,13 @@ namespace IngameScript
                     mode = "grinding";
                     zdir = "down";
                 }
+                SaveToCustomData();
             }
 
             if (argument.Equals("return", StringComparison.OrdinalIgnoreCase))
             {
                 returnAfterDone = !returnAfterDone;
+                SaveToCustomData();
             }
 
             if (argument.Equals("home", StringComparison.OrdinalIgnoreCase))
@@ -198,18 +174,21 @@ namespace IngameScript
                 if (mode == "welding") ztar = minZ;
                 ytar = minY;
                 xtar = minX;
+                manualMove = true;
             }
 
             if (argument.Equals("auto", StringComparison.OrdinalIgnoreCase))
             {
                 autoMode = !autoMode;
                 if (autoMode) PistonX.Velocity = maxToolSpeed;
+                manualMove = false;
             }
 
             if (argument.StartsWith("goto", StringComparison.OrdinalIgnoreCase))
             {
-                
-                string[] xyz = argument.Split(new char[] { ',', ' ' } ); 
+
+                string[] xyz = argument.Split(new char[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                Echo(xyz[0] + xyz[1] + xyz[2] + xyz[3]);
                 if (xyz.Length == 4)
                 {
                     int x, y, z;
@@ -222,13 +201,14 @@ namespace IngameScript
                             xtar = x;
                             ytar = y;
                             ztar = z;
+                            manualMove = true;
                         }
                     }
                 }
             }
             if (Me.CustomData == "")
             {
-                Me.CustomData = "[3DPrinter]\n; Work area dimentions:\nmaxX = 20\nmaxY = 20\nmaxZ = 20\nminX = 0\nminY = 0\nminZ = 0\n; Mode: grinding or welding\n mode = grinding\n; Tool Length in number of blocks(default:10)\noolLength = 10\n; Return to home position?\nreturnAfterDone=true\n; Fastest pistons can move(0-5)\nmaxMovementSpeed=5.0f\n; Max piston speed during Auto Mode\n; (recommended: 0.5 for grinding, 0.2 for welding)\nmaxToolSpeed=0.5f";
+
             }
             else
             if (!CustomData.TryParse(Me.CustomData, out result)) throw new Exception(result.ToString());
@@ -239,13 +219,30 @@ namespace IngameScript
             minX = CustomData.Get("3DPrinter", "minX").ToInt32(0);
             minY = CustomData.Get("3DPrinter", "minY").ToInt32(0);
             minZ = CustomData.Get("3DPrinter", "minZ").ToInt32(0);
-            returnAfterDone = ini.Get("3DPrinter", "returnAfterDone").ToBoolean(true);
-            maxMovementSpeed = ini.Get("3DPrinter", "maxMovementSpeed").ToSingle(5f);
-            maxToolSpeed = ini.Get("3DPrinter", "maxToolSpeed").ToSingle(0.5f);
-            toolLength = ini.Get("3DPrinter", "toolLength").ToInt32(10);
-            mode = ini.Get("3DPrinter", "mode").ToString("grinding");
+            returnAfterDone = CustomData.Get("3DPrinter", "returnAfterDone").ToBoolean(true);
+            maxMovementSpeed = CustomData.Get("3DPrinter", "maxMovementSpeed").ToSingle(5f);
+            grindingSpeed = CustomData.Get("3DPrinter", "grindingSpeed").ToSingle(0.5f);
+            weldingSpeed = CustomData.Get("3DPrinter", "weldingSpeed").ToSingle(0.2f);
+            toolLength = CustomData.Get("3DPrinter", "toolLength").ToInt32(10);
+            mode = CustomData.Get("3DPrinter", "mode").ToString("grinding");
 
             string ERR_TXT = "";
+
+            if (mode == "grinding") maxToolSpeed = grindingSpeed;
+
+            if (mode == "welding") maxToolSpeed = weldingSpeed;
+
+            if (manualMove)
+            {
+                if (xpos == xtar && ypos == ytar && zpos == ztar)
+                {
+                    xdir = "forward";
+                    ydir = "right";
+                    if (mode == "grinding") zdir = "down";
+                    if (mode == "welding") zdir = "up";
+                    manualMove = false;
+                }
+            }
 
             // raw pos based on merge block names
             getxposmerge = getPos(MergeX);
@@ -268,6 +265,7 @@ namespace IngameScript
             Echo("Y Tar:" + ytar);
             Echo("Z Tar:" + ztar);
             Echo("Auto Mode: " + autoMode.ToString());
+            Echo("Mode: " + mode);
             Echo("X Direction: " + xdir);
             Echo("Y Direction: " + ydir);
             Echo("Z Direction: " + zdir);
@@ -280,14 +278,15 @@ namespace IngameScript
             }
             else if (xdir.IndexOf("moving") == -1 && ydir.IndexOf("moving") == -1 && zdir.IndexOf("moving") == -1) // nothing is currently moving
             {
-                if (autoMode && ypos == ytar && zpos == ztar &&((xdir == "forward" && xpos >= maxX) || (xdir == "backward" && xpos <= minX))) // automode only
+                if (autoMode && ypos == ytar && zpos == ztar && ((xdir == "forward" && xpos >= maxX) || (xdir == "backward" && xpos <= minX))) // automode only
                 {
-                    PistonX.Enabled = false; // disable X Piston while anything else is moving
+                    PistonX.Enabled = false; // disable X Piston and Sensor while anything else is moving
+                    Sensor.Enabled = false;
                     if ((ypos == minY && ydir == "left") || (ypos + toolLength == maxY && ydir == "right")) // move z up/down
                     {
                         if ((zpos == maxZ && mode == "welding") || (zpos == minZ) && mode == "grinding") Done(); // done! returning to starting position
                         else if (mode == "welding") ztar = ztar + 1;
-                        else if (zdir == "grinding") ztar = ztar - 1;
+                        else if (mode == "grinding") ztar = ztar - 1;
                     }
                     else if ((ypos > minY) || (ypos + toolLength < maxY)) // move y left/right
                     {
@@ -306,9 +305,9 @@ namespace IngameScript
                     MoveX();
                 }
                 // does something need to move?
-                if (zpos != ztar) MoveZ(); 
+                if (zpos != ztar) MoveZ();
                 else if (ypos != ytar) MoveY();
-                else if (! autoMode) // move X while automode is off
+                else if (!autoMode) // move X while automode is off
                 {
                     if (xpos > xtar && xposmerge == minX)
                     {
@@ -331,7 +330,7 @@ namespace IngameScript
         }
         void Done()
         {
-            
+
             if (returnAfterDone)
             {
                 ztar = maxZ;
@@ -343,6 +342,7 @@ namespace IngameScript
                 PistonX.Enabled = false;
                 PistonY.Enabled = false;
                 PistonZ.Enabled = false;
+                Sensor.Enabled = false;
 
             }
             autoMode = false;
@@ -353,7 +353,6 @@ namespace IngameScript
         {
             if (Merge.IsConnected)
             {
-                Echo("getpos " + Merge);
                 //Find direction that block merges to
                 Matrix mat;
                 Merge.Orientation.GetMatrix(out mat);
@@ -383,6 +382,7 @@ namespace IngameScript
 
         public void MoveX() // step 1, release and move piston
         {
+            PistonX.Enabled = true;
             Echo("Moving X " + xdir);
             if (xdir == "forward" || xdir == "backward")
             {
@@ -397,7 +397,7 @@ namespace IngameScript
                         xdir = "moving-forward";
                         Echo("X Target: " + xtar);
                     }
-                    if (xpos > xtar)
+                    else if (xpos > xtar)
                     {
                         PistonX.Velocity = maxMovementSpeed;
                         xdir = "moving-backward";
@@ -454,7 +454,7 @@ namespace IngameScript
                         ydir = "moving-right";
                         Echo("Y Target: " + ytar);
                     }
-                    if (ypos > ytar)
+                    else if (ypos > ytar)
                     {
                         PistonY.Velocity = maxMovementSpeed;
                         ydir = "moving-left";
@@ -476,7 +476,7 @@ namespace IngameScript
                         PistonY.Velocity = maxMovementSpeed;
                         Echo("Y Reached: " + ypos);
                     }
-                    if (ydir == "moving-left")
+                    else if (ydir == "moving-left")
                     {
                         ydir = "left";
                         PistonY.Velocity = -1 * maxMovementSpeed;
@@ -488,12 +488,14 @@ namespace IngameScript
                         {
                             xdir = "backward";
                             PistonX.Enabled = true;
+                            Sensor.Enabled = true;
                             PistonX.Velocity = -1 * maxToolSpeed;
                         }
                         else if (xdir == "backward")
                         {
                             xdir = "forward";
                             PistonX.Enabled = true;
+                            Sensor.Enabled = true;
                             PistonX.Velocity = maxToolSpeed;
                         }
                     }
@@ -519,7 +521,7 @@ namespace IngameScript
                         zdir = "moving-up";
                         Echo("Z Target: " + ztar);
                     }
-                    if (zpos > ztar)
+                    else if (zpos > ztar)
                     {
                         PistonZ.Velocity = maxMovementSpeed;
                         zdir = "moving-down";
@@ -543,7 +545,7 @@ namespace IngameScript
                         PistonZ.Velocity = maxMovementSpeed;
                         Echo("Z Reached: " + zpos);
                     }
-                    if (zdir == "moving-down")
+                    else if (zdir == "moving-down")
                     {
                         zdir = "down";
                         PistonZ.Velocity = -1 * maxMovementSpeed;
@@ -564,23 +566,53 @@ namespace IngameScript
                         {
                             xdir = "backward";
                             PistonX.Enabled = true;
+                            Sensor.Enabled = true;
                             PistonX.Velocity = -1 * maxToolSpeed;
                         }
                         else if (xdir == "backward")
                         {
                             xdir = "forward";
                             PistonX.Enabled = true;
+                            Sensor.Enabled = true;
                             PistonX.Velocity = maxToolSpeed;
                         }
                     }
                 }
             }
         }
+        public void SaveToCustomData()
+        {
+            MyIniParseResult result;
+            if (!CustomData.TryParse(Me.CustomData, out result))
+                throw new Exception(result.ToString());
+
+            CustomData.Set("3DPrinter", "maxX", maxX);
+            CustomData.SetComment("3DPrinter", "maxX", " Work area dimentions:");
+            CustomData.Set("3DPrinter", "maxY", maxY);
+            CustomData.Set("3DPrinter", "maxZ", maxZ);
+            CustomData.Set("3DPrinter", "minX", minX);
+            CustomData.Set("3DPrinter", "minY", minY);
+            CustomData.Set("3DPrinter", "minZ", minZ);
+            CustomData.Set("3DPrinter", "mode", mode);
+            CustomData.SetComment("3DPrinter", "mode", " Mode: grinding or welding");
+            CustomData.Set("3DPrinter", "toolLength", toolLength);
+            CustomData.SetComment("3DPrinter", "toolLength", " Tool Length in number of blocks(default:10)");
+            CustomData.Set("3DPrinter", "returnAfterDone", returnAfterDone);
+            CustomData.SetComment("3DPrinter", "returnAfterDone", " Return to home position after completion?");
+            CustomData.Set("3DPrinter", "maxMovementSpeed", maxMovementSpeed);
+            CustomData.SetComment("3DPrinter", "maxMovementSpeed", " Fastest pistons can move (0.0-5.0)");
+            CustomData.Set("3DPrinter", "grindingSpeed", grindingSpeed);
+            CustomData.SetComment("3DPrinter", "grindingSpeed", " Max piston speed while grinding (default:0.5f)");
+            CustomData.Set("3DPrinter", "weldingSpeed", weldingSpeed);
+            CustomData.SetComment("3DPrinter", "weldingSpeed", " Max piston speed while welding (default:0.2f)");
+
+            Me.CustomData = CustomData.ToString();
+        }
         public void Save()
         {
             ini.Clear();
             ini.Set("3DPrinter", "xtar", xtar);
-            ini.Set("3DPrinter", "ytar", ytar); 
+            ini.Set("3DPrinter", "ytar", ytar);
             ini.Set("3DPrinter", "ztar", ztar);
             ini.Set("3DPrinter", "xpos", xpos);
             ini.Set("3DPrinter", "ypos", ypos);
@@ -597,11 +629,13 @@ namespace IngameScript
             ini.Set("3DPrinter", "minZ", minZ);
             ini.Set("3DPrinter", "returnAfterDone", returnAfterDone);
             ini.Set("3DPrinter", "maxMovementSpeed", maxMovementSpeed);
-            ini.Set("3DPrinter", "maxToolSpeed", maxToolSpeed);
+            ini.Set("3DPrinter", "grindingSpeed", grindingSpeed);
+            ini.Set("3DPrinter", "weldingSpeed", weldingSpeed);
             ini.Set("3DPrinter", "toolLength", toolLength);
             ini.Set("3DPrinter", "mode", mode);
             ini.Set("3DPrinter", "autoMode", autoMode);
             ini.Set("3DPrinter", "firstrun", firstrun);
+            ini.Set("3DPrinter", "manualMove", manualMove);
             Storage = ini.ToString();
         }
     }
