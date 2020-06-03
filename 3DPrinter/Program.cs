@@ -43,7 +43,7 @@ namespace IngameScript
         // goto x,y,z   - stops auto mode and moves to specified coordinates. e.g. goto 3,10,20 (y must be an even number)
         // home         - stops auto mode and moves to X minimum, Y minimum, Z maximum
         // return       - toggles automaticly return to home position after completion
-        // refresh      - refreshes all block names, same as recompiling the script
+        // refresh      - refreshes all block names, and resets CustomData to last known valid configuration
         //
         // Use CustomData to change work area, tool size, and speed settings.
         // 
@@ -84,7 +84,7 @@ namespace IngameScript
             minZ = ini.Get("3DPrinter", "minZ").ToInt32(0);
             // piston and tool settings
             returnAfterDone = ini.Get("3DPrinter", "returnAfterDone").ToBoolean(true); // returns to maxZ, minY, minX when job is completed
-            maxMovementSpeed = ini.Get("3DPrinter", "maxMovementSpeed").ToSingle(5f); // max speed while changing positions
+            maxMovementSpeed = ini.Get("3DPrinter", "maxMovementSpeed").ToSingle(5.0f); // max speed while changing positions
             grindingSpeed = ini.Get("3DPrinter", "grindingSpeed").ToSingle(0.5f); // max speed of tool while in grinding mode
             weldingSpeed = ini.Get("3DPrinter", "weldingSpeed").ToSingle(0.2f); // max speed of tool while in welding mode
             toolLength = ini.Get("3DPrinter", "toolLength").ToInt32(10); // length of tool in blocks
@@ -279,24 +279,26 @@ namespace IngameScript
             if (argument.Equals("refresh", StringComparison.OrdinalIgnoreCase))
             {
                 GetBlocks();
+                SaveToCustomData();
             }
             if (!CustomData.TryParse(Me.CustomData, out result)) throw new Exception(result.ToString());
 
-            maxX = CustomData.Get("3DPrinter", "maxX").ToInt32(20);
-            int testmaxY = CustomData.Get("3DPrinter", "maxY").ToInt32(20);
+            maxX = CustomData.Get("3DPrinter", "maxX").ToInt32(maxX);
+            int testmaxY = CustomData.Get("3DPrinter", "maxY").ToInt32(maxY);
             if (testmaxY % 2 == 0) maxY = testmaxY;
-            maxZ = CustomData.Get("3DPrinter", "maxZ").ToInt32(20);
-            minX = CustomData.Get("3DPrinter", "minX").ToInt32(0);
-            int testminY = CustomData.Get("3DPrinter", "minY").ToInt32(0);
-            if (testminY % 2 == 0) maxY = testminY;
-            minZ = CustomData.Get("3DPrinter", "minZ").ToInt32(0);
-            returnAfterDone = CustomData.Get("3DPrinter", "returnAfterDone").ToBoolean(true);
-            maxMovementSpeed = CustomData.Get("3DPrinter", "maxMovementSpeed").ToSingle(5f);
-            grindingSpeed = CustomData.Get("3DPrinter", "grindingSpeed").ToSingle(0.5f);
-            weldingSpeed = CustomData.Get("3DPrinter", "weldingSpeed").ToSingle(0.2f);
-            toolLength = CustomData.Get("3DPrinter", "toolLength").ToInt32(10);
-            mode = CustomData.Get("3DPrinter", "mode").ToString("grinding");
+            maxZ = CustomData.Get("3DPrinter", "maxZ").ToInt32(maxZ);
+            minX = CustomData.Get("3DPrinter", "minX").ToInt32(minX);
+            int testminY = CustomData.Get("3DPrinter", "minY").ToInt32(minY);
+            if (testminY % 2 == 0) minY = testminY;
+            minZ = CustomData.Get("3DPrinter", "minZ").ToInt32(minZ);
+            returnAfterDone = CustomData.Get("3DPrinter", "returnAfterDone").ToBoolean(returnAfterDone);
+            maxMovementSpeed = CustomData.Get("3DPrinter", "maxMovementSpeed").ToSingle(maxMovementSpeed);
+            grindingSpeed = CustomData.Get("3DPrinter", "grindingSpeed").ToSingle(grindingSpeed);
+            weldingSpeed = CustomData.Get("3DPrinter", "weldingSpeed").ToSingle(weldingSpeed);
+            toolLength = CustomData.Get("3DPrinter", "toolLength").ToInt32(toolLength);
+            mode = CustomData.Get("3DPrinter", "mode").ToString(mode);
 
+            if (Me.CustomData == "") SaveToCustomData();
             string ERR_TXT = "";
 
             if (mode == "grinding") maxToolSpeed = grindingSpeed;
@@ -684,9 +686,9 @@ namespace IngameScript
             CustomData.Set("3DPrinter", "maxMovementSpeed", maxMovementSpeed);
             CustomData.SetComment("3DPrinter", "maxMovementSpeed", " Fastest pistons can move (0.0-5.0)");
             CustomData.Set("3DPrinter", "grindingSpeed", grindingSpeed);
-            CustomData.SetComment("3DPrinter", "grindingSpeed", " Max piston speed while grinding (default:0.5f)");
+            CustomData.SetComment("3DPrinter", "grindingSpeed", " Max piston speed while grinding (default:0.5)");
             CustomData.Set("3DPrinter", "weldingSpeed", weldingSpeed);
-            CustomData.SetComment("3DPrinter", "weldingSpeed", " Max piston speed while welding (default:0.2f)");
+            CustomData.SetComment("3DPrinter", "weldingSpeed", " Max piston speed while welding (default:0.2)");
 
             Me.CustomData = CustomData.ToString();
         }
