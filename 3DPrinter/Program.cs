@@ -241,7 +241,6 @@ namespace IngameScript
                 for (int i = 0; i < grinders.Count; i++) grinders[i].Enabled = false;
 
                 string[] xyz = argument.Split(new char[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries);
-                Echo(xyz[0] + xyz[1] + xyz[2] + xyz[3]);
                 if (xyz.Length == 4)
                 {
                     int x, y, z;
@@ -445,13 +444,11 @@ namespace IngameScript
                     {
                         PistonX.Velocity = -1 * maxMovementSpeed;
                         xdir = "moving-forward";
-                        Echo("X Target: " + xtar);
                     }
                     else if (xpos > xtar)
                     {
                         PistonX.Velocity = maxMovementSpeed;
                         xdir = "moving-backward";
-                        Echo("X Target: " + xtar);
                     }
                 }
             }
@@ -503,13 +500,11 @@ namespace IngameScript
                     {
                         PistonY.Velocity = -1 * maxMovementSpeed;
                         ydir = "moving-right";
-                        Echo("Y Target: " + ytar);
                     }
                     else if (ypos > ytar)
                     {
                         PistonY.Velocity = maxMovementSpeed;
                         ydir = "moving-left";
-                        Echo("Y Target: " + ytar);
                     }
                 }
             }
@@ -570,13 +565,11 @@ namespace IngameScript
                     {
                         PistonZ.Velocity = -1 * maxMovementSpeed;
                         zdir = "moving-up";
-                        Echo("Z Target: " + ztar);
                     }
                     else if (zpos > ztar)
                     {
                         PistonZ.Velocity = maxMovementSpeed;
                         zdir = "moving-down";
-                        Echo("Z Target: " + ztar);
                     }
                 }
             }
@@ -691,4 +684,3 @@ namespace IngameScript
         }
     }
 }
-
