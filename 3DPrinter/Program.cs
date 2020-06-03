@@ -31,9 +31,23 @@ namespace IngameScript
     partial class Program : MyGridProgram
     {
         // Written (poorly) by Astrianna - 2020
-
-        // TODO
-        // LCD menu/output
+        //
+        /////////////////////////////////////// 
+        //
+        // Available arguments: (not case sensitive) 
+        //
+        // stop         - use to immediatly pause all activity
+        // start        - use to resume all activity
+        // mode         - toggles mode between grinding and welding
+        // auto         - toggles automatic mode
+        // goto x,y,z   - stops auto mode and moves to specified coordinates. e.g. goto 3,10,20 (y must be an even number)
+        // home         - stops auto mode and moves to X minimum, Y minimum, Z maximum
+        // return       - toggles automaticly return to home position after completion
+        // refresh      - refreshes all block names, same as recompiling the script
+        //
+        // Use CustomData to change work area, tool size, and speed settings.
+        // 
+        ///////////////////////////////////////
 
         MyIni ini = new MyIni();
         MyIni CustomData = new MyIni();
@@ -78,6 +92,7 @@ namespace IngameScript
             autoMode = ini.Get("3DPrinter", "autoMode").ToBoolean(false);
             firstrun = ini.Get("3DPrinter", "firstrun").ToBoolean(true);
             manualMove = ini.Get("3DPrinter", "manualMove").ToBoolean(false);
+
             GetBlocks();
         }
 
@@ -88,7 +103,7 @@ namespace IngameScript
         IMyShipMergeBlock MergeX, MergeY, MergeZ;
         List<IMyShipWelder> welders = new List<IMyShipWelder>();
         List<IMyShipGrinder> grinders = new List<IMyShipGrinder>();
-
+        List<IMyTextPanel> lcds = new List<IMyTextPanel>();
 
         public void GetBlocks() // you didn't change any names, did you?
         {
@@ -107,8 +122,9 @@ namespace IngameScript
             MergeX = GridTerminalSystem.GetBlockWithName("X Merge") as IMyShipMergeBlock;
             MergeY = GridTerminalSystem.GetBlockWithName("Y Merge") as IMyShipMergeBlock;
             MergeZ = GridTerminalSystem.GetBlockWithName("Z Merge") as IMyShipMergeBlock;
-            GridTerminalSystem.GetBlockGroupWithName("3D-Printer").GetBlocksOfType<IMyShipWelder>(welders);
-            GridTerminalSystem.GetBlockGroupWithName("3D-Printer").GetBlocksOfType<IMyShipGrinder>(grinders);
+            GridTerminalSystem.GetBlockGroupWithName("3D-Printer").GetBlocksOfType(welders);
+            GridTerminalSystem.GetBlockGroupWithName("3D-Printer").GetBlocksOfType(grinders);
+            GridTerminalSystem.GetBlockGroupWithName("3D-Printer").GetBlocksOfType(lcds);
             if (Sensor == null) Echo("Tool Sensor not found!");
             if (ConnectorX == null) Echo("X Connector not found!");
             if (ConnectorY == null) Echo("Y Connector not found!");
@@ -125,6 +141,9 @@ namespace IngameScript
             if (MergeY == null) Echo("Y Merge not found!");
             if (MergeZ == null) Echo("Z Merge not found!");
             if (welders.Count == 0 && grinders.Count == 0) Echo("No Welders or Grinders found in Group '3D-Printer'");
+            if (lcds.Count == 0) Echo("No LCD Panels found in Group '3D-Printer'");
+            if (welders.Count != 0 && grinders.Count == 0) mode = "welding";
+            if (welders.Count == 0 && grinders.Count != 0) mode = "grinding";
         }
 
         public void Main(string argument)
@@ -157,7 +176,7 @@ namespace IngameScript
 
                 if (xpause != xpos || ypause != ypos || zpause != zpos)
                 {
-                    Echo("Position changed while paused\nOh, geez, where was I?");
+                    Echo("Position changed while paused\nStarting forward");
                     PistonX.Velocity = maxToolSpeed;
                 }
             }
@@ -246,8 +265,7 @@ namespace IngameScript
                     int x, y, z;
                     if (int.TryParse(xyz[1], out x) && int.TryParse(xyz[2], out y) && int.TryParse(xyz[3], out z))
                     {
-
-                        if (x >= minX && x <= maxY && y >= minY && y <= maxY && z >= minZ && z <= maxZ)
+                        if (y % 2 == 0 && x >= minX && x <= maxY && y >= minY && y <= maxY && z >= minZ && z <= maxZ)
                         {
                             autoMode = false;
                             xtar = x;
@@ -258,13 +276,19 @@ namespace IngameScript
                     }
                 }
             }
+            if (argument.Equals("refresh", StringComparison.OrdinalIgnoreCase))
+            {
+                GetBlocks();
+            }
             if (!CustomData.TryParse(Me.CustomData, out result)) throw new Exception(result.ToString());
 
             maxX = CustomData.Get("3DPrinter", "maxX").ToInt32(20);
-            maxY = CustomData.Get("3DPrinter", "maxY").ToInt32(20);
+            int testmaxY = CustomData.Get("3DPrinter", "maxY").ToInt32(20);
+            if (testmaxY % 2 == 0) maxY = testmaxY;
             maxZ = CustomData.Get("3DPrinter", "maxZ").ToInt32(20);
             minX = CustomData.Get("3DPrinter", "minX").ToInt32(0);
-            minY = CustomData.Get("3DPrinter", "minY").ToInt32(0);
+            int testminY = CustomData.Get("3DPrinter", "minY").ToInt32(0);
+            if (testminY % 2 == 0) maxY = testminY;
             minZ = CustomData.Get("3DPrinter", "minZ").ToInt32(0);
             returnAfterDone = CustomData.Get("3DPrinter", "returnAfterDone").ToBoolean(true);
             maxMovementSpeed = CustomData.Get("3DPrinter", "maxMovementSpeed").ToSingle(5f);
@@ -304,19 +328,39 @@ namespace IngameScript
             if (getzpos != -1) zpos = getzpos;
 
             // debug, change to LCD later
+
+            Echo("Mode: " + mode);
+            Echo("Auto Mode: " + autoMode.ToString());
             Echo("X: " + xpos);
             Echo("Y: " + ypos);
             Echo("Z: " + zpos);
-            Echo("XMerge:" + xposmerge);
             Echo("X Tar:" + xtar);
             Echo("Y Tar:" + ytar);
             Echo("Z Tar:" + ztar);
-            Echo("Auto Mode: " + autoMode.ToString());
-            Echo("Mode: " + mode);
             Echo("X Direction: " + xdir);
             Echo("Y Direction: " + ydir);
             Echo("Z Direction: " + zdir);
 
+
+            if(lcds.Count != 0)
+                { 
+                for (int i = 0; i < lcds.Count; i++)
+                {
+                    lcds[i].ContentType = ContentType.TEXT_AND_IMAGE;
+                    lcds[i].WriteText("");
+                    lcds[i].WriteText("Mode: " + mode + "\n", true );
+                    lcds[i].WriteText("Auto Mode: " + autoMode.ToString() + "\n", true);
+                    lcds[i].WriteText("X: " + xpos + "\n", true);
+                    lcds[i].WriteText("Y: " + ypos + "\n", true);
+                    lcds[i].WriteText("Z: " + zpos + "\n", true);
+                    lcds[i].WriteText("X Target: " + xtar + "\n", true);
+                    lcds[i].WriteText("Y Target: " + ytar + "\n", true);
+                    lcds[i].WriteText("Z Target: " + ztar + "\n", true);
+                    lcds[i].WriteText("X Direction: " + xdir + "\n", true);
+                    lcds[i].WriteText("Y Direction: " + ydir + "\n", true);
+                    lcds[i].WriteText("Z Direction: " + zdir + "\n", true);
+                }
+            }
             if (xdir.IndexOf("moving") != -1 || ydir.IndexOf("moving") != -1 || zdir.IndexOf("moving") != -1) // something is currently moving, check to see if its ready to stop 
             {
                 if (zdir == "moving-down" && PistonZ.CurrentPosition == PistonZ.MaxLimit || zdir == "moving-up" && PistonZ.CurrentPosition == PistonZ.MinLimit) MoveZ();
@@ -431,7 +475,6 @@ namespace IngameScript
         public void MoveX() // step 1, release and move piston
         {
             PistonX.Enabled = true;
-            Echo("Moving X " + xdir);
             if (xdir == "forward" || xdir == "backward")
             {
                 MoveConX.Enabled = true;
@@ -467,9 +510,11 @@ namespace IngameScript
                             PistonX.Velocity = maxToolSpeed;
                             xdir = "forward";
                         }
-                        else { PistonX.Velocity = maxMovementSpeed; }
-                        xdir = "forward";
-                        Echo("X Reached: " + xpos);
+                        else
+                        {
+                            PistonX.Velocity = maxMovementSpeed;
+                            xdir = "forward";
+                        }
                     }
                     if (xdir == "moving-backward")
                     {
@@ -478,17 +523,17 @@ namespace IngameScript
                             PistonX.Velocity = -1 * maxToolSpeed;
                             xdir = "backward";
                         }
-                        else { PistonX.Velocity = -1 * maxMovementSpeed; }
-
-                        xdir = "backward";
-                        Echo("X Reached: " + xpos);
+                        else
+                        {
+                            PistonX.Velocity = -1 * maxMovementSpeed;
+                            xdir = "backward";
+                        }
                     }
                 }
             }
         }
         public void MoveY() // step 1, release and move piston
         {
-            Echo("MoveY()" + ydir);
             if (ydir == "right" || ydir == "left")
             {
                 MoveConY.Connect();
@@ -520,13 +565,11 @@ namespace IngameScript
                     {
                         ydir = "right";
                         PistonY.Velocity = maxMovementSpeed;
-                        Echo("Y Reached: " + ypos);
                     }
                     else if (ydir == "moving-left")
                     {
                         ydir = "left";
                         PistonY.Velocity = -1 * maxMovementSpeed;
-                        Echo("Y Reached: " + ypos);
                     }
                     if (autoMode && ypos == ytar) // reverse x before continuing
                     {
@@ -550,12 +593,10 @@ namespace IngameScript
         }
         public void MoveZ() // step 1, release and move piston
         {
-            Echo("MoveZ()" + zdir);
             if (zdir == "up" || zdir == "down")
             {
                 MoveConZ1.Connect();
                 MoveConZ2.Connect();
-                Echo(MoveConZ1.Status.ToString() + MoveConZ2.Status.ToString());
                 if (MoveConZ1.Status == MyShipConnectorStatus.Connected || MoveConZ2.Status == MyShipConnectorStatus.Connected)
                 {
                     ConnectorZ1.Disconnect();
@@ -576,7 +617,6 @@ namespace IngameScript
             else if (zdir == "moving-up" || zdir == "moving-down") // step 2, merge and continue
             {
                 MergeZ.ApplyAction("OnOff_On");
-
                 if (MergeZ.IsConnected)
                 {
                     ConnectorZ1.Connect();
@@ -587,13 +627,11 @@ namespace IngameScript
                     {
                         zdir = "up";
                         PistonZ.Velocity = maxMovementSpeed;
-                        Echo("Z Reached: " + zpos);
                     }
                     else if (zdir == "moving-down")
                     {
                         zdir = "down";
                         PistonZ.Velocity = -1 * maxMovementSpeed;
-                        Echo("Z Reached: " + zpos);
                     }
                     if (autoMode && zpos == ztar) //reverse x and y before continuing 
                     {
@@ -680,6 +718,7 @@ namespace IngameScript
             ini.Set("3DPrinter", "autoMode", autoMode);
             ini.Set("3DPrinter", "firstrun", firstrun);
             ini.Set("3DPrinter", "manualMove", manualMove);
+
             Storage = ini.ToString();
         }
     }
