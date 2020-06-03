@@ -86,6 +86,8 @@ namespace IngameScript
         IMyShipConnector ConnectorX, ConnectorY, ConnectorZ1, ConnectorZ2, MoveConX, MoveConY, MoveConZ1, MoveConZ2;
         IMyPistonBase PistonX, PistonY, PistonZ;
         IMyShipMergeBlock MergeX, MergeY, MergeZ;
+        List<IMyShipWelder> welders = new List<IMyShipWelder>();
+        List<IMyShipGrinder> grinders = new List<IMyShipGrinder>();
 
 
         public void GetBlocks() // you didn't change any names, did you?
@@ -105,6 +107,24 @@ namespace IngameScript
             MergeX = GridTerminalSystem.GetBlockWithName("X Merge") as IMyShipMergeBlock;
             MergeY = GridTerminalSystem.GetBlockWithName("Y Merge") as IMyShipMergeBlock;
             MergeZ = GridTerminalSystem.GetBlockWithName("Z Merge") as IMyShipMergeBlock;
+            GridTerminalSystem.GetBlockGroupWithName("3D-Printer").GetBlocksOfType<IMyShipWelder>(welders);
+            GridTerminalSystem.GetBlockGroupWithName("3D-Printer").GetBlocksOfType<IMyShipGrinder>(grinders);
+            if (Sensor == null) Echo("Tool Sensor not found!");
+            if (ConnectorX == null) Echo("X Connector not found!");
+            if (ConnectorY == null) Echo("Y Connector not found!");
+            if (ConnectorZ1 == null) Echo("Z Connector 1 not found!");
+            if (ConnectorZ2 == null) Echo("Z Connector 2 not found!");
+            if (MoveConX == null) Echo("X Move not found!");
+            if (MoveConY == null) Echo("Y Move not found!");
+            if (MoveConZ1 == null) Echo("Z Move 1 not found!");
+            if (MoveConZ2 == null) Echo("Z Move 2 not found!");
+            if (PistonX == null) Echo("X Piston not found!");
+            if (PistonY == null) Echo("Y Piston not found!");
+            if (PistonZ == null) Echo("Z Piston not found!");
+            if (MergeX == null) Echo("X Merge not found!");
+            if (MergeY == null) Echo("Y Merge not found!");
+            if (MergeZ == null) Echo("Z Merge not found!");
+            if (welders.Count == 0 && grinders.Count == 0) Echo("No Welders or Grinders found in Group '3D-Printer'");
         }
 
         public void Main(string argument)
@@ -126,6 +146,14 @@ namespace IngameScript
                 PistonX.Enabled = true;
                 PistonY.Enabled = true;
                 PistonZ.Enabled = true;
+                if (mode == "welding")
+                {
+                    for (int i = 0; i < welders.Count; i++) welders[i].Enabled = true;
+                }
+                else if (mode == "grinding")
+                {
+                    for (int i = 0; i < grinders.Count; i++) grinders[i].Enabled = true;
+                }
 
                 if (xpause != xpos || ypause != ypos || zpause != zpos)
                 {
@@ -143,6 +171,8 @@ namespace IngameScript
                 xpause = xpos;
                 ypause = ypos;
                 zpause = zpos;
+                for (int i = 0; i < welders.Count; i++) welders[i].Enabled = false;
+                for (int i = 0; i < grinders.Count; i++) grinders[i].Enabled = false;
             }
 
             if (argument.Equals("mode", StringComparison.OrdinalIgnoreCase))
@@ -175,17 +205,40 @@ namespace IngameScript
                 ytar = minY;
                 xtar = minX;
                 manualMove = true;
+                for (int i = 0; i < welders.Count; i++) welders[i].Enabled = false;
+                for (int i = 0; i < grinders.Count; i++) grinders[i].Enabled = false;
+
             }
 
             if (argument.Equals("auto", StringComparison.OrdinalIgnoreCase))
             {
                 autoMode = !autoMode;
-                if (autoMode) PistonX.Velocity = maxToolSpeed;
+                if (autoMode)
+                {
+                    PistonX.Velocity = maxToolSpeed;
+                    if (mode == "welding")
+                    {
+                        for (int i = 0; i < welders.Count; i++) welders[i].Enabled = true;
+                    }
+                    else if (mode == "grinding")
+                    {
+                        for (int i = 0; i < grinders.Count; i++) grinders[i].Enabled = true;
+                    }
+                }
+                else
+                {
+                    for (int i = 0; i < welders.Count; i++) welders[i].Enabled = false;
+                    for (int i = 0; i < grinders.Count; i++) grinders[i].Enabled = false;
+                }
+
                 manualMove = false;
+             
             }
 
             if (argument.StartsWith("goto", StringComparison.OrdinalIgnoreCase))
             {
+                for (int i = 0; i < welders.Count; i++) welders[i].Enabled = false;
+                for (int i = 0; i < grinders.Count; i++) grinders[i].Enabled = false;
 
                 string[] xyz = argument.Split(new char[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries);
                 Echo(xyz[0] + xyz[1] + xyz[2] + xyz[3]);
@@ -206,11 +259,6 @@ namespace IngameScript
                     }
                 }
             }
-            if (Me.CustomData == "")
-            {
-
-            }
-            else
             if (!CustomData.TryParse(Me.CustomData, out result)) throw new Exception(result.ToString());
 
             maxX = CustomData.Get("3DPrinter", "maxX").ToInt32(20);
@@ -331,23 +379,24 @@ namespace IngameScript
         void Done()
         {
 
-            if (returnAfterDone)
-            {
-                ztar = maxZ;
-                ytar = minY;
-                xtar = minX;
-            }
             if (zpos == ztar && ypos == ytar && xposmerge == ztar)
-            {
+            { 
+                if (returnAfterDone)
+                {
+                    ztar = maxZ;
+                    ytar = minY;
+                    xtar = minX;
+                }
+
                 PistonX.Enabled = false;
                 PistonY.Enabled = false;
                 PistonZ.Enabled = false;
                 Sensor.Enabled = false;
-
+                for (int i = 0; i < welders.Count; i++) welders[i].Enabled = false;
+                for (int i = 0; i < grinders.Count; i++) grinders[i].Enabled = false;
             }
             autoMode = false;
             Echo("Job Complete");
-
         }
         double getPos(IMyShipMergeBlock Merge) //get x, y, or z position, based on named merge blocks. Thank you, JoeTheDestroyer, for posting this in 2016.
         {
@@ -386,6 +435,7 @@ namespace IngameScript
             Echo("Moving X " + xdir);
             if (xdir == "forward" || xdir == "backward")
             {
+                MoveConX.Enabled = true;
                 MoveConX.Connect();
                 if (MoveConX.Status == MyShipConnectorStatus.Connected)
                 {
@@ -412,6 +462,7 @@ namespace IngameScript
                 {
                     ConnectorX.Connect();
                     MoveConX.Disconnect();
+                    MoveConX.Enabled = false;
                     if (xdir == "moving-forward")
                     {
                         if (autoMode)
