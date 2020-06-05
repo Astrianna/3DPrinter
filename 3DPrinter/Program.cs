@@ -54,27 +54,49 @@ namespace IngameScript
         MyIniParseResult result;
 
         // declare variables before config
-        string xdir, ydir, zdir, mode;
-        double xtar, ytar, ztar, xpos, ypos, zpos, xpause, ypause, zpause, xposmerge, getxposmerge, getypos, getzpos;
+        double xTar, yTar, zTar, xPos, yPos, zPos, xPause, yPause, zPause, xPosMerge, getXPosMerge, getYPos, getZPos;
         int maxX, maxY, maxZ, minX, minY, minZ, toolLength;
-        bool returnAfterDone, autoMode, firstrun, manualMove;
+        bool returnAfterDone, autoMode, firstRun, manualMove;
         float maxMovementSpeed, maxToolSpeed, grindingSpeed, weldingSpeed;
+        StringBuilder output = new StringBuilder("");
+        enum Emode
+        {
+            grinding,
+            welding    
+        }
+        enum Dir
+        {
+            forward,
+            backward,
+            left,
+            right,
+            up,
+            down,
+            movingforward,
+            movingbackward,
+            movingleft,
+            movingright,
+            movingup,
+            movingdown
+        }
+        Emode mode;
+        Dir xDir, yDir, zDir;
 
         public Program()
         {
             Runtime.UpdateFrequency = UpdateFrequency.Update100;
             ini.TryParse(Storage);
             // xyz starting position
-            xtar = ini.Get("3DPrinter", "xtar").ToDouble(0);
-            ytar = ini.Get("3DPrinter", "ytar").ToDouble(0); // even numbers only
-            ztar = ini.Get("3DPrinter", "ztar").ToDouble(20);
-            xpos = ini.Get("3DPrinter", "xpos").ToDouble(0);
-            ypos = ini.Get("3DPrinter", "ypos").ToDouble(0);
-            zpos = ini.Get("3DPrinter", "zpos").ToDouble(20);
-            xposmerge = ini.Get("3DPrinter", "xposmerge").ToDouble(0);
-            xdir = ini.Get("3DPrinter", "xdir").ToString("forward");
-            ydir = ini.Get("3DPrinter", "ydir").ToString("right");
-            zdir = ini.Get("3DPrinter", "zdir").ToString("down");
+            xTar = ini.Get("3DPrinter", "xtar").ToDouble(0);
+            yTar = ini.Get("3DPrinter", "ytar").ToDouble(0); // even numbers only
+            zTar = ini.Get("3DPrinter", "ztar").ToDouble(20);
+            xPos = ini.Get("3DPrinter", "xpos").ToDouble(0);
+            yPos = ini.Get("3DPrinter", "ypos").ToDouble(0);
+            zPos = ini.Get("3DPrinter", "zpos").ToDouble(20);
+            xPosMerge = ini.Get("3DPrinter", "xposmerge").ToDouble(0);
+            if (!Enum.TryParse<Dir>(ini.Get("3DPrinter", "xdir").ToString("forward"), out xDir)) {; }
+            if (!Enum.TryParse<Dir>(ini.Get("3DPrinter", "ydir").ToString("forward"), out yDir)) {; }
+            if (!Enum.TryParse<Dir>(ini.Get("3DPrinter", "zdir").ToString("forward"), out zDir)) {; }
             // work area
             maxX = ini.Get("3DPrinter", "maxX").ToInt32(20);
             maxY = ini.Get("3DPrinter", "maxY").ToInt32(20);
@@ -88,9 +110,9 @@ namespace IngameScript
             grindingSpeed = ini.Get("3DPrinter", "grindingSpeed").ToSingle(0.5f); // max speed of tool while in grinding mode
             weldingSpeed = ini.Get("3DPrinter", "weldingSpeed").ToSingle(0.2f); // max speed of tool while in welding mode
             toolLength = ini.Get("3DPrinter", "toolLength").ToInt32(10); // length of tool in blocks
-            mode = ini.Get("3DPrinter", "mode").ToString("grinding"); // "grinding" or "welding"
+            if (!Enum.TryParse<Emode>(ini.Get("3DPrinter", "mode").ToString("forward"), out mode)) {; }
             autoMode = ini.Get("3DPrinter", "autoMode").ToBoolean(false);
-            firstrun = ini.Get("3DPrinter", "firstrun").ToBoolean(true);
+            firstRun = ini.Get("3DPrinter", "firstrun").ToBoolean(true);
             manualMove = ini.Get("3DPrinter", "manualMove").ToBoolean(false);
 
             GetBlocks();
@@ -125,32 +147,32 @@ namespace IngameScript
             GridTerminalSystem.GetBlockGroupWithName("3D-Printer").GetBlocksOfType(welders);
             GridTerminalSystem.GetBlockGroupWithName("3D-Printer").GetBlocksOfType(grinders);
             GridTerminalSystem.GetBlockGroupWithName("3D-Printer").GetBlocksOfType(lcds);
-            if (Sensor == null) Echo("Tool Sensor not found!");
-            if (ConnectorX == null) Echo("X Connector not found!");
-            if (ConnectorY == null) Echo("Y Connector not found!");
-            if (ConnectorZ1 == null) Echo("Z Connector 1 not found!");
-            if (ConnectorZ2 == null) Echo("Z Connector 2 not found!");
-            if (MoveConX == null) Echo("X Move not found!");
-            if (MoveConY == null) Echo("Y Move not found!");
-            if (MoveConZ1 == null) Echo("Z Move 1 not found!");
-            if (MoveConZ2 == null) Echo("Z Move 2 not found!");
-            if (PistonX == null) Echo("X Piston not found!");
-            if (PistonY == null) Echo("Y Piston not found!");
-            if (PistonZ == null) Echo("Z Piston not found!");
-            if (MergeX == null) Echo("X Merge not found!");
-            if (MergeY == null) Echo("Y Merge not found!");
-            if (MergeZ == null) Echo("Z Merge not found!");
-            if (welders.Count == 0 && grinders.Count == 0) Echo("No Welders or Grinders found in Group '3D-Printer'");
-            if (lcds.Count == 0) Echo("No LCD Panels found in Group '3D-Printer'");
-            if (welders.Count != 0 && grinders.Count == 0) mode = "welding";
-            if (welders.Count == 0 && grinders.Count != 0) mode = "grinding";
+            if (Sensor == null) output.Append("Tool Sensor not found!\n");
+            if (ConnectorX == null) output.Append("X Connector not found!\n");
+            if (ConnectorY == null) output.Append("Y Connector not found!\n");
+            if (ConnectorZ1 == null) output.Append("Z Connector 1 not found!\n");
+            if (ConnectorZ2 == null) output.Append("Z Connector 2 not found!\n");
+            if (MoveConX == null) output.Append("X Move not found!\n");
+            if (MoveConY == null) output.Append("Y Move not found!\n");
+            if (MoveConZ1 == null) output.Append("Z Move 1 not found!\n");
+            if (MoveConZ2 == null) output.Append("Z Move 2 not found!\n");
+            if (PistonX == null) output.Append("X Piston not found!\n");
+            if (PistonY == null) output.Append("Y Piston not found!\n");
+            if (PistonZ == null) output.Append("Z Piston not found!\n");
+            if (MergeX == null) output.Append("X Merge not found!\n");
+            if (MergeY == null) output.Append("Y Merge not found!\n");
+            if (MergeZ == null) output.Append("Z Merge not found!\n");
+            if (welders.Count == 0 && grinders.Count == 0) output.Append("No Welders or Grinders found in Group '3D-Printer'\n");
+            if (lcds.Count == 0) output.Append("No LCD Panels found in Group '3D-Printer'\n");
+            if (welders.Count != 0 && grinders.Count == 0) mode = Emode.welding;
+            if (welders.Count == 0 && grinders.Count != 0) mode = Emode.grinding;
         }
 
         public void Main(string argument)
         {
-            if (firstrun)
+            if (firstRun)
             {
-                firstrun = false;
+                firstRun = false;
                 Sensor.Enabled = false;
                 PistonX.Enabled = true;
                 PistonY.Enabled = true;
@@ -159,24 +181,26 @@ namespace IngameScript
                 SaveToCustomData();
             }
 
+            output.Clear();
+
             if (argument.Equals("start", StringComparison.OrdinalIgnoreCase))
             {
                 if (autoMode) Sensor.Enabled = true;
                 PistonX.Enabled = true;
                 PistonY.Enabled = true;
                 PistonZ.Enabled = true;
-                if (mode == "welding")
+                if (mode == Emode.welding)
                 {
                     for (int i = 0; i < welders.Count; i++) welders[i].Enabled = true;
                 }
-                else if (mode == "grinding")
+                else if (mode == Emode.grinding)
                 {
                     for (int i = 0; i < grinders.Count; i++) grinders[i].Enabled = true;
                 }
 
-                if (xpause != xpos || ypause != ypos || zpause != zpos)
+                if (xPause != xPos || yPause != yPos || zPause != zPos)
                 {
-                    Echo("Position changed while paused\nStarting forward");
+                    output.Append("Position changed while paused\nStarting forward\n");
                     PistonX.Velocity = maxToolSpeed;
                 }
             }
@@ -187,9 +211,9 @@ namespace IngameScript
                 PistonX.Enabled = false;
                 PistonY.Enabled = false;
                 PistonZ.Enabled = false;
-                xpause = xpos;
-                ypause = ypos;
-                zpause = zpos;
+                xPause = xPos;
+                yPause = yPos;
+                zPause = zPos;
                 for (int i = 0; i < welders.Count; i++) welders[i].Enabled = false;
                 for (int i = 0; i < grinders.Count; i++) grinders[i].Enabled = false;
             }
@@ -197,16 +221,16 @@ namespace IngameScript
             if (argument.Equals("mode", StringComparison.OrdinalIgnoreCase))
             {
 
-                if (mode == "grinding")
+                if (mode == Emode.grinding)
                 {
-                    mode = "welding";
-                    zdir = "up";
+                    mode = Emode.welding;
+                    zDir = Dir.up;
                 }
 
-                else if (mode == "welding")
+                else if (mode == Emode.welding)
                 {
-                    mode = "grinding";
-                    zdir = "down";
+                    mode = Emode.grinding;
+                    zDir = Dir.down;
                 }
                 SaveToCustomData();
             }
@@ -219,10 +243,11 @@ namespace IngameScript
 
             if (argument.Equals("home", StringComparison.OrdinalIgnoreCase))
             {
-                if (mode == "grinding") ztar = maxZ;
-                if (mode == "welding") ztar = minZ;
-                ytar = minY;
-                xtar = minX;
+                if (mode == Emode.grinding) zTar = maxZ;
+                if (mode == Emode.welding) zTar = minZ;
+                yTar = minY;
+                xTar = minX;
+                autoMode = false;
                 manualMove = true;
                 for (int i = 0; i < welders.Count; i++) welders[i].Enabled = false;
                 for (int i = 0; i < grinders.Count; i++) grinders[i].Enabled = false;
@@ -235,11 +260,11 @@ namespace IngameScript
                 if (autoMode)
                 {
                     PistonX.Velocity = maxToolSpeed;
-                    if (mode == "welding")
+                    if (mode == Emode.welding)
                     {
                         for (int i = 0; i < welders.Count; i++) welders[i].Enabled = true;
                     }
-                    else if (mode == "grinding")
+                    else if (mode == Emode.grinding)
                     {
                         for (int i = 0; i < grinders.Count; i++) grinders[i].Enabled = true;
                     }
@@ -268,9 +293,9 @@ namespace IngameScript
                         if (y % 2 == 0 && x >= minX && x <= maxY && y >= minY && y <= maxY && z >= minZ && z <= maxZ)
                         {
                             autoMode = false;
-                            xtar = x;
-                            ytar = y;
-                            ztar = z;
+                            xTar = x;
+                            yTar = y;
+                            zTar = z;
                             manualMove = true;
                         }
                     }
@@ -286,151 +311,152 @@ namespace IngameScript
             maxX = CustomData.Get("3DPrinter", "maxX").ToInt32(maxX);
             int testmaxY = CustomData.Get("3DPrinter", "maxY").ToInt32(maxY);
             if (testmaxY % 2 == 0) maxY = testmaxY;
+            else
+            {
+                output.Append("maxY must be a multiple of 2\n");
+            }
+
             maxZ = CustomData.Get("3DPrinter", "maxZ").ToInt32(maxZ);
             minX = CustomData.Get("3DPrinter", "minX").ToInt32(minX);
             int testminY = CustomData.Get("3DPrinter", "minY").ToInt32(minY);
             if (testminY % 2 == 0) minY = testminY;
+            else
+            {
+                output.Append("minY must be a multiple of 2\n");
+            }
             minZ = CustomData.Get("3DPrinter", "minZ").ToInt32(minZ);
             returnAfterDone = CustomData.Get("3DPrinter", "returnAfterDone").ToBoolean(returnAfterDone);
             maxMovementSpeed = CustomData.Get("3DPrinter", "maxMovementSpeed").ToSingle(maxMovementSpeed);
             grindingSpeed = CustomData.Get("3DPrinter", "grindingSpeed").ToSingle(grindingSpeed);
             weldingSpeed = CustomData.Get("3DPrinter", "weldingSpeed").ToSingle(weldingSpeed);
             toolLength = CustomData.Get("3DPrinter", "toolLength").ToInt32(toolLength);
-            mode = CustomData.Get("3DPrinter", "mode").ToString(mode);
+            if (!Enum.TryParse<Emode>(CustomData.Get("3DPrinter", "mode").ToString("welding"), out mode)) 
+            {
+                output.Append("Mode must be 'grinding' or 'welding'\n");
+            }
 
             if (Me.CustomData == "") SaveToCustomData();
             string ERR_TXT = "";
 
-            if (mode == "grinding") maxToolSpeed = grindingSpeed;
+            if (mode == Emode.grinding) maxToolSpeed = grindingSpeed;
 
-            if (mode == "welding") maxToolSpeed = weldingSpeed;
+            if (mode == Emode.welding) maxToolSpeed = weldingSpeed;
 
             if (manualMove)
             {
-                if (xpos == xtar && ypos == ytar && zpos == ztar)
+                if (xPos == xTar && yPos == yTar && zPos == zTar)
                 {
-                    xdir = "forward";
-                    ydir = "right";
-                    if (mode == "grinding") zdir = "down";
-                    if (mode == "welding") zdir = "up";
+                    xDir = Dir.forward;
+                    yDir = Dir.right;
+                    if (mode == Emode.grinding) zDir = Dir.down;
+                    if (mode == Emode.welding) zDir = Dir.up;
                     manualMove = false;
                 }
             }
 
             // raw pos based on merge block names
-            getxposmerge = getPos(MergeX);
-            getypos = getPos(MergeY);
-            getzpos = getPos(MergeZ);
-            if (getxposmerge != -1)
+            getXPosMerge = getPos(MergeX);
+            getYPos = getPos(MergeY);
+            getZPos = getPos(MergeZ);
+            if (getXPosMerge != -1)
             {
-                xposmerge = getxposmerge;
-                xpos = Math.Round(xposmerge + (PistonX.CurrentPosition - PistonX.MinLimit) / 2.5, 1); // X Merge + X Piston
+                xPosMerge = getXPosMerge;
+                xPos = Math.Round(xPosMerge + (PistonX.CurrentPosition - PistonX.MinLimit) / 2.5, 1); // X Merge + X Piston
             }
-            if (getypos != -1) ypos = getypos;
-            if (getzpos != -1) zpos = getzpos;
+            if (getYPos != -1) yPos = getYPos;
+            if (getZPos != -1) zPos = getZPos;
 
             // debug, change to LCD later
 
-            Echo("Mode: " + mode);
-            Echo("Auto Mode: " + autoMode.ToString());
-            Echo("X: " + xpos);
-            Echo("Y: " + ypos);
-            Echo("Z: " + zpos);
-            Echo("X Tar:" + xtar);
-            Echo("Y Tar:" + ytar);
-            Echo("Z Tar:" + ztar);
-            Echo("X Direction: " + xdir);
-            Echo("Y Direction: " + ydir);
-            Echo("Z Direction: " + zdir);
-
-
-            if(lcds.Count != 0)
-                { 
-                for (int i = 0; i < lcds.Count; i++)
-                {
-                    lcds[i].ContentType = ContentType.TEXT_AND_IMAGE;
-                    lcds[i].WriteText("");
-                    lcds[i].WriteText("Mode: " + mode + "\n", true );
-                    lcds[i].WriteText("Auto Mode: " + autoMode.ToString() + "\n", true);
-                    lcds[i].WriteText("X: " + xpos + "\n", true);
-                    lcds[i].WriteText("Y: " + ypos + "\n", true);
-                    lcds[i].WriteText("Z: " + zpos + "\n", true);
-                    lcds[i].WriteText("X Target: " + xtar + "\n", true);
-                    lcds[i].WriteText("Y Target: " + ytar + "\n", true);
-                    lcds[i].WriteText("Z Target: " + ztar + "\n", true);
-                    lcds[i].WriteText("X Direction: " + xdir + "\n", true);
-                    lcds[i].WriteText("Y Direction: " + ydir + "\n", true);
-                    lcds[i].WriteText("Z Direction: " + zdir + "\n", true);
-                }
-            }
-            if (xdir.IndexOf("moving") != -1 || ydir.IndexOf("moving") != -1 || zdir.IndexOf("moving") != -1) // something is currently moving, check to see if its ready to stop 
+            if ((int)xDir >= 6 || (int)yDir >=6 || (int)zDir >= 6) // something is currently moving, check to see if its ready to stop 
             {
-                if (zdir == "moving-down" && PistonZ.CurrentPosition == PistonZ.MaxLimit || zdir == "moving-up" && PistonZ.CurrentPosition == PistonZ.MinLimit) MoveZ();
-                else if (ydir == "moving-right" && PistonY.CurrentPosition == PistonY.MinLimit || ydir == "moving-left" && PistonY.CurrentPosition == PistonY.MaxLimit) MoveY();
-                else if (xdir == "moving-forward" && PistonX.CurrentPosition == PistonX.MinLimit || xdir == "moving-backward" && PistonX.CurrentPosition == PistonX.MaxLimit) MoveX();
+                if (zDir == Dir.movingdown && PistonZ.CurrentPosition == PistonZ.MaxLimit || zDir == Dir.movingup && PistonZ.CurrentPosition == PistonZ.MinLimit) MoveZ();
+                else if (yDir == Dir.movingright && PistonY.CurrentPosition == PistonY.MinLimit || yDir == Dir.movingleft && PistonY.CurrentPosition == PistonY.MaxLimit) MoveY();
+                else if (xDir == Dir.movingforward && PistonX.CurrentPosition == PistonX.MinLimit || xDir == Dir.movingbackward && PistonX.CurrentPosition == PistonX.MaxLimit) MoveX();
             }
-            else if (xdir.IndexOf("moving") == -1 && ydir.IndexOf("moving") == -1 && zdir.IndexOf("moving") == -1) // nothing is currently moving
+            else if ((int)xDir <=5 && (int)yDir <= 5 && (int)zDir <= 5) // nothing is currently moving
             {
-                if (autoMode && ypos == ytar && zpos == ztar && ((xdir == "forward" && xpos >= maxX) || (xdir == "backward" && xpos <= minX))) // automode only
+                if (autoMode && yPos == yTar && zPos == zTar && ((xDir == Dir.forward && xPos >= maxX) || (xDir == Dir.backward && xPos <= minX))) // automode only
                 {
                     PistonX.Enabled = false; // disable X Piston and Sensor while anything else is moving
                     Sensor.Enabled = false;
-                    if ((ypos == minY && ydir == "left") || (ypos + toolLength == maxY && ydir == "right")) // move z up/down
+                    if ((yPos == minY && yDir == Dir.left) || (yPos + toolLength == maxY && yDir == Dir.right)) // move z up/down
                     {
-                        if ((zpos == maxZ && mode == "welding") || (zpos == minZ) && mode == "grinding") Done(); // done! returning to starting position
-                        else if (mode == "welding") ztar = ztar + 1;
-                        else if (mode == "grinding") ztar = ztar - 1;
+                        if ((zPos == maxZ && mode == Emode.welding) || (zPos == minZ) && mode == Emode.grinding) Done(); // done! returning to starting position
+                        else if (mode == Emode.welding) zTar = zTar + 1;
+                        else if (mode == Emode.grinding) zTar = zTar - 1;
                     }
-                    else if ((ypos > minY) || (ypos + toolLength < maxY)) // move y left/right
+                    else if ((yPos > minY) || (yPos + toolLength < maxY)) // move y left/right
                     {
-                        if (ydir == "right") ytar = ytar + toolLength;
-                        else if (ydir == "left") ytar = ytar - toolLength;
+                        if (yDir == Dir.right) yTar = yTar + toolLength;
+                        else if (yDir == Dir.left) yTar = yTar - toolLength;
                     }
                 }
-                if (autoMode && xdir == "forward" && PistonX.CurrentPosition == PistonX.MaxLimit && xpos < maxX) // automode only
+                if (autoMode && xDir == Dir.forward && PistonX.CurrentPosition == PistonX.MaxLimit && xPos < maxX) // automode only
                 {
-                    xtar = xtar + 3;
+                    xTar = xTar + 3;
                     MoveX();
                 }
-                else if (autoMode && xdir == "backward" && PistonX.CurrentPosition == PistonX.MinLimit && xposmerge > minX) //automode only
+                else if (autoMode && xDir == Dir.backward && PistonX.CurrentPosition == PistonX.MinLimit && xPosMerge > minX) //automode only
                 {
-                    xtar = xtar - 3;
+                    xTar = xTar - 3;
                     MoveX();
                 }
                 // does something need to move?
-                if (zpos != ztar) MoveZ();
-                else if (ypos != ytar) MoveY();
+                if (zPos != zTar) MoveZ();
+                else if (yPos != yTar) MoveY();
                 else if (!autoMode) // move X while automode is off
                 {
-                    if (xpos > xtar && xposmerge == minX)
+                    if (xPos > xTar && xPosMerge == minX)
                     {
                         PistonX.Velocity = -1 * maxMovementSpeed;
                     }
-                    else if (xpos < xtar && xpos < maxX)
+                    else if (xPos < xTar && xPos < maxX)
                     {
                         PistonX.Velocity = maxMovementSpeed;
                     }
-                    else if ((xpos > xtar && xposmerge != minX) || (xpos < xtar && xpos < maxX)) MoveX();
+                    else if ((xPos > xTar && xPosMerge != minX) || (xPos < xTar && xPos < maxX)) MoveX();
                 }
                 // display errors
                 if (ERR_TXT != "")
                 {
-                    Echo("Script Errors:\n" + ERR_TXT + "(make sure block ownership is set correctly)");
-                    return;
+                    output.Insert(0,"Script Errors:\n" + ERR_TXT + "(make sure block ownership is set correctly)\n");
                 }
-                else { Echo(""); }
+                // build standard output for LCDs/Terminal
+                output.Append("Mode: " + mode + "\n");
+                output.Append("Auto Mode: " + autoMode.ToString() + "\n");
+                output.Append("X: " + xPos + "\n");
+                output.Append("Y: " + yPos + "\n");
+                output.Append("Z: " + zPos + "\n");
+                output.Append("X Target: " + xTar + "\n");
+                output.Append("Y Target: " + yTar + "\n");
+                output.Append("Z Target: " + zTar + "\n");
+                output.Append("X Direction: " + xDir + "\n");
+                output.Append("Y Direction: " + yDir + "\n");
+                output.Append("Z Direction: " + zDir + "\n");
+                
+                Echo(output.ToString());
+                if (lcds.Count != 0)
+                {
+                    for (int i = 0; i < lcds.Count; i++)
+                    {
+                        lcds[i].ContentType = ContentType.TEXT_AND_IMAGE;
+                        lcds[i].WriteText(output.ToString(),false);
+                    }
+                }
+
             }
         }
         void Done()
         {
 
-            if (zpos == ztar && ypos == ytar && xposmerge == ztar)
+            if (zPos == zTar && yPos == yTar && xPosMerge == zTar)
             { 
                 if (returnAfterDone)
                 {
-                    ztar = maxZ;
-                    ytar = minY;
-                    xtar = minX;
+                    zTar = maxZ;
+                    yTar = minY;
+                    xTar = minX;
                 }
 
                 PistonX.Enabled = false;
@@ -441,7 +467,7 @@ namespace IngameScript
                 for (int i = 0; i < grinders.Count; i++) grinders[i].Enabled = false;
             }
             autoMode = false;
-            Echo("Job Complete");
+            output.Insert(0,"Job Complete!");
         }
         double getPos(IMyShipMergeBlock Merge) //get x, y, or z position, based on named merge blocks. Thank you, JoeTheDestroyer, for posting this in 2016.
         {
@@ -454,11 +480,11 @@ namespace IngameScript
 
                 //Check if there is a block in front of merge face
                 IMySlimBlock sb = Merge.CubeGrid.GetCubeBlock(Merge.Position + right1);
-                if (sb == null) Echo("No Blocks in front of Merge Block");
+                if (sb == null) output.Append("No Blocks in front of Merge Block\n");
 
                 //Check if the other block is actually a merge block
                 IMyShipMergeBlock mb = sb.FatBlock as IMyShipMergeBlock;
-                if (mb == null) Echo("Not A Merge Block");
+                if (mb == null) output.Append("Not A Merge Block\n");
 
                 //Check that other block is correctly oriented
                 if (mb != null)
@@ -477,58 +503,58 @@ namespace IngameScript
         public void MoveX() // step 1, release and move piston
         {
             PistonX.Enabled = true;
-            if (xdir == "forward" || xdir == "backward")
+            if (xDir == Dir.forward || xDir == Dir.backward)
             {
                 MoveConX.Enabled = true;
                 MoveConX.Connect();
                 if (MoveConX.Status == MyShipConnectorStatus.Connected)
                 {
                     ConnectorX.Disconnect();
-                    MergeX.ApplyAction("OnOff_Off");
-                    if (xpos < xtar)
+                    MergeX.Enabled = false;
+                    if (xPos < xTar)
                     {
                         PistonX.Velocity = -1 * maxMovementSpeed;
-                        xdir = "moving-forward";
+                        xDir = Dir.movingforward;
                     }
-                    else if (xpos > xtar)
+                    else if (xPos > xTar)
                     {
                         PistonX.Velocity = maxMovementSpeed;
-                        xdir = "moving-backward";
+                        xDir = Dir.movingbackward;
                     }
                 }
             }
-            else if (xdir == "moving-forward" || xdir == "moving-backward") // step 2, merge and continue
+            else if (xDir == Dir.movingforward || xDir == Dir.movingbackward) // step 2, merge and continue
             {
-                MergeX.ApplyAction("OnOff_On");
+                MergeX.Enabled = true;
                 if (MergeX.IsConnected)
                 {
                     ConnectorX.Connect();
                     MoveConX.Disconnect();
                     MoveConX.Enabled = false;
-                    if (xdir == "moving-forward")
+                    if (xDir == Dir.movingforward)
                     {
                         if (autoMode)
                         {
                             PistonX.Velocity = maxToolSpeed;
-                            xdir = "forward";
+                            xDir = Dir.forward;
                         }
                         else
                         {
                             PistonX.Velocity = maxMovementSpeed;
-                            xdir = "forward";
+                            xDir = Dir.forward;
                         }
                     }
-                    if (xdir == "moving-backward")
+                    if (xDir == Dir.movingbackward)
                     {
                         if (autoMode)
                         {
                             PistonX.Velocity = -1 * maxToolSpeed;
-                            xdir = "backward";
+                            xDir = Dir.backward;
                         }
                         else
                         {
                             PistonX.Velocity = -1 * maxMovementSpeed;
-                            xdir = "backward";
+                            xDir = Dir.backward;
                         }
                     }
                 }
@@ -536,55 +562,55 @@ namespace IngameScript
         }
         public void MoveY() // step 1, release and move piston
         {
-            if (ydir == "right" || ydir == "left")
+            if (yDir == Dir.right || yDir == Dir.left)
             {
                 MoveConY.Connect();
                 if (MoveConY.Status == MyShipConnectorStatus.Connected)
                 {
                     ConnectorY.Disconnect();
-                    MergeY.ApplyAction("OnOff_Off");
-                    if (ypos < ytar)
+                    MergeY.Enabled = false;
+                    if (yPos < yTar)
                     {
                         PistonY.Velocity = -1 * maxMovementSpeed;
-                        ydir = "moving-right";
+                        yDir = Dir.movingright;
                     }
-                    else if (ypos > ytar)
+                    else if (yPos > yTar)
                     {
                         PistonY.Velocity = maxMovementSpeed;
-                        ydir = "moving-left";
+                        yDir = Dir.movingleft;
                     }
                 }
             }
-            else if (ydir == "moving-right" || ydir == "moving-left") // step 2, merge and continue
+            else if (yDir == Dir.movingright || yDir == Dir.movingleft) // step 2, merge and continue
             {
-                MergeY.ApplyAction("OnOff_On");
+                MergeY.Enabled = true;
                 if (MergeY.IsConnected)
                 {
                     ConnectorY.Connect();
 
                     MoveConY.Disconnect();
-                    if (ydir == "moving-right")
+                    if (yDir == Dir.movingright)
                     {
-                        ydir = "right";
+                        yDir = Dir.right;
                         PistonY.Velocity = maxMovementSpeed;
                     }
-                    else if (ydir == "moving-left")
+                    else if (yDir == Dir.movingleft)
                     {
-                        ydir = "left";
+                        yDir = Dir.left;
                         PistonY.Velocity = -1 * maxMovementSpeed;
                     }
-                    if (autoMode && ypos == ytar) // reverse x before continuing
+                    if (autoMode && yPos == yTar) // reverse x before continuing
                     {
-                        if (xdir == "forward")
+                        if (xDir == Dir.forward)
                         {
-                            xdir = "backward";
+                            xDir = Dir.backward;
                             PistonX.Enabled = true;
                             Sensor.Enabled = true;
                             PistonX.Velocity = -1 * maxToolSpeed;
                         }
-                        else if (xdir == "backward")
+                        else if (xDir == Dir.backward)
                         {
-                            xdir = "forward";
+                            xDir = Dir.forward;
                             PistonX.Enabled = true;
                             Sensor.Enabled = true;
                             PistonX.Velocity = maxToolSpeed;
@@ -595,7 +621,7 @@ namespace IngameScript
         }
         public void MoveZ() // step 1, release and move piston
         {
-            if (zdir == "up" || zdir == "down")
+            if (zDir == Dir.up || zDir == Dir.down)
             {
                 MoveConZ1.Connect();
                 MoveConZ2.Connect();
@@ -603,59 +629,59 @@ namespace IngameScript
                 {
                     ConnectorZ1.Disconnect();
                     ConnectorZ2.Disconnect();
-                    MergeZ.ApplyAction("OnOff_Off");
-                    if (zpos < ztar)
+                    MergeZ.Enabled = false;
+                    if (zPos < zTar)
                     {
                         PistonZ.Velocity = -1 * maxMovementSpeed;
-                        zdir = "moving-up";
+                        zDir = Dir.movingup;
                     }
-                    else if (zpos > ztar)
+                    else if (zPos > zTar)
                     {
                         PistonZ.Velocity = maxMovementSpeed;
-                        zdir = "moving-down";
+                        zDir = Dir.movingdown;
                     }
                 }
             }
-            else if (zdir == "moving-up" || zdir == "moving-down") // step 2, merge and continue
+            else if (zDir == Dir.movingup || zDir == Dir.movingdown) // step 2, merge and continue
             {
-                MergeZ.ApplyAction("OnOff_On");
+                MergeZ.Enabled = true;
                 if (MergeZ.IsConnected)
                 {
                     ConnectorZ1.Connect();
                     ConnectorZ2.Connect();
                     MoveConZ1.Disconnect();
                     MoveConZ2.Disconnect();
-                    if (zdir == "moving-up")
+                    if (zDir == Dir.movingup)
                     {
-                        zdir = "up";
+                        zDir = Dir.up;
                         PistonZ.Velocity = maxMovementSpeed;
                     }
-                    else if (zdir == "moving-down")
+                    else if (zDir == Dir.movingdown)
                     {
-                        zdir = "down";
+                        zDir = Dir.down;
                         PistonZ.Velocity = -1 * maxMovementSpeed;
                     }
-                    if (autoMode && zpos == ztar) //reverse x and y before continuing 
+                    if (autoMode && zPos == zTar) //reverse x and y before continuing 
                     {
-                        if (ydir == "left")
+                        if (yDir == Dir.left)
                         {
-                            ydir = "right";
+                            yDir = Dir.right;
                         }
-                        else if (ydir == "right")
+                        else if (yDir == Dir.right)
                         {
-                            ydir = "left";
+                            yDir = Dir.left;
                         }
                         
-                        if (xdir == "forward")
+                        if (xDir == Dir.forward)
                         {
-                            xdir = "backward";
+                            xDir = Dir.backward;
                             PistonX.Enabled = true;
                             Sensor.Enabled = true;
                             PistonX.Velocity = -1 * maxToolSpeed;
                         }
-                        else if (xdir == "backward")
+                        else if (xDir == Dir.backward)
                         {
-                            xdir = "forward";
+                            xDir = Dir.forward;
                             PistonX.Enabled = true;
                             Sensor.Enabled = true;
                             PistonX.Velocity = maxToolSpeed;
@@ -677,7 +703,7 @@ namespace IngameScript
             CustomData.Set("3DPrinter", "minX", minX);
             CustomData.Set("3DPrinter", "minY", minY);
             CustomData.Set("3DPrinter", "minZ", minZ);
-            CustomData.Set("3DPrinter", "mode", mode);
+            CustomData.Set("3DPrinter", "mode", mode.ToString());
             CustomData.SetComment("3DPrinter", "mode", " Mode: grinding or welding");
             CustomData.Set("3DPrinter", "toolLength", toolLength);
             CustomData.SetComment("3DPrinter", "toolLength", " Tool Length in number of blocks(default:10)");
@@ -695,16 +721,16 @@ namespace IngameScript
         public void Save()
         {
             ini.Clear();
-            ini.Set("3DPrinter", "xtar", xtar);
-            ini.Set("3DPrinter", "ytar", ytar);
-            ini.Set("3DPrinter", "ztar", ztar);
-            ini.Set("3DPrinter", "xpos", xpos);
-            ini.Set("3DPrinter", "ypos", ypos);
-            ini.Set("3DPrinter", "zpos", zpos);
-            ini.Set("3DPrinter", "xposmerge", xposmerge);
-            ini.Set("3DPrinter", "xdir", xdir);
-            ini.Set("3DPrinter", "ydir", ydir);
-            ini.Set("3DPrinter", "zdir", zdir);
+            ini.Set("3DPrinter", "xtar", xTar);
+            ini.Set("3DPrinter", "ytar", yTar);
+            ini.Set("3DPrinter", "ztar", zTar);
+            ini.Set("3DPrinter", "xpos", xPos);
+            ini.Set("3DPrinter", "ypos", yPos);
+            ini.Set("3DPrinter", "zpos", zPos);
+            ini.Set("3DPrinter", "xposmerge", xPosMerge);
+            ini.Set("3DPrinter", "xdir", xDir.ToString());
+            ini.Set("3DPrinter", "ydir", yDir.ToString());
+            ini.Set("3DPrinter", "zdir", zDir.ToString());
             ini.Set("3DPrinter", "maxX", maxX);
             ini.Set("3DPrinter", "maxY", maxY);
             ini.Set("3DPrinter", "maxZ", maxZ);
@@ -716,9 +742,9 @@ namespace IngameScript
             ini.Set("3DPrinter", "grindingSpeed", grindingSpeed);
             ini.Set("3DPrinter", "weldingSpeed", weldingSpeed);
             ini.Set("3DPrinter", "toolLength", toolLength);
-            ini.Set("3DPrinter", "mode", mode);
+            ini.Set("3DPrinter", "mode", mode.ToString());
             ini.Set("3DPrinter", "autoMode", autoMode);
-            ini.Set("3DPrinter", "firstrun", firstrun);
+            ini.Set("3DPrinter", "firstrun", firstRun);
             ini.Set("3DPrinter", "manualMove", manualMove);
 
             Storage = ini.ToString();
