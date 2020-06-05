@@ -56,7 +56,7 @@ namespace IngameScript
         // declare variables before config
         double xTar, yTar, zTar, xPos, yPos, zPos, xPause, yPause, zPause, xPosMerge, getXPosMerge, getYPos, getZPos;
         int maxX, maxY, maxZ, minX, minY, minZ, toolLength;
-        bool returnAfterDone, autoMode, firstRun, manualMove;
+        bool returnAfterDone, autoMode, firstRun, manualMove, moveReady;
         float maxMovementSpeed, maxToolSpeed, grindingSpeed, weldingSpeed;
         StringBuilder output = new StringBuilder("");
         enum Emode
@@ -366,15 +366,13 @@ namespace IngameScript
             if (getYPos != -1) yPos = getYPos;
             if (getZPos != -1) zPos = getZPos;
 
-            // debug, change to LCD later
-
             if ((int)xDir >= 6 || (int)yDir >=6 || (int)zDir >= 6) // something is currently moving, check to see if its ready to stop 
             {
                 if (zDir == Dir.movingdown && PistonZ.CurrentPosition == PistonZ.MaxLimit || zDir == Dir.movingup && PistonZ.CurrentPosition == PistonZ.MinLimit) MoveZ();
                 else if (yDir == Dir.movingright && PistonY.CurrentPosition == PistonY.MinLimit || yDir == Dir.movingleft && PistonY.CurrentPosition == PistonY.MaxLimit) MoveY();
                 else if (xDir == Dir.movingforward && PistonX.CurrentPosition == PistonX.MinLimit || xDir == Dir.movingbackward && PistonX.CurrentPosition == PistonX.MaxLimit) MoveX();
             }
-            else if ((int)xDir <=5 && (int)yDir <= 5 && (int)zDir <= 5) // nothing is currently moving
+            else if ((int)xDir <= 5 && (int)yDir <= 5 && (int)zDir <= 5) // nothing is currently moving
             {
                 if (autoMode && yPos == yTar && zPos == zTar && ((xDir == Dir.forward && xPos >= maxX) || (xDir == Dir.backward && xPos <= minX))) // automode only
                 {
@@ -392,14 +390,22 @@ namespace IngameScript
                         else if (yDir == Dir.left) yTar = yTar - toolLength;
                     }
                 }
-                if (autoMode && xDir == Dir.forward && PistonX.CurrentPosition == PistonX.MaxLimit && xPos < maxX) // automode only
+                else if (autoMode && xDir == Dir.forward && PistonX.CurrentPosition == PistonX.MaxLimit && xPos < maxX) // automode only
                 {
-                    xTar = xTar + 3;
+                    if (moveReady == true)
+                    {
+                        xTar = xTar + 3;
+                        moveReady = false;
+                    }
                     MoveX();
                 }
                 else if (autoMode && xDir == Dir.backward && PistonX.CurrentPosition == PistonX.MinLimit && xPosMerge > minX) //automode only
                 {
-                    xTar = xTar - 3;
+                    if (moveReady == true)
+                    {
+                        xTar = xTar - 3;
+                        moveReady = false;
+                    }
                     MoveX();
                 }
                 // does something need to move?
@@ -415,7 +421,10 @@ namespace IngameScript
                     {
                         PistonX.Velocity = maxMovementSpeed;
                     }
-                    else if ((xPos > xTar && xPosMerge != minX) || (xPos < xTar && xPos < maxX)) MoveX();
+                    else if ((xPos > xTar && xPosMerge != minX) || (xPos < xTar && xPos < maxX))
+                    {
+                        MoveX();
+                    }
                 }
                 // display errors
                 if (ERR_TXT != "")
@@ -511,12 +520,12 @@ namespace IngameScript
                 {
                     ConnectorX.Disconnect();
                     MergeX.Enabled = false;
-                    if (xPos < xTar)
+                    if (xPosMerge < xTar)
                     {
                         PistonX.Velocity = -1 * maxMovementSpeed;
                         xDir = Dir.movingforward;
                     }
-                    else if (xPos > xTar)
+                    else if (xPosMerge > xTar)
                     {
                         PistonX.Velocity = maxMovementSpeed;
                         xDir = Dir.movingbackward;
@@ -528,33 +537,32 @@ namespace IngameScript
                 MergeX.Enabled = true;
                 if (MergeX.IsConnected)
                 {
+                    moveReady = true;
                     ConnectorX.Connect();
                     MoveConX.Disconnect();
                     MoveConX.Enabled = false;
                     if (xDir == Dir.movingforward)
                     {
+                        xDir = Dir.forward;
                         if (autoMode)
                         {
                             PistonX.Velocity = maxToolSpeed;
-                            xDir = Dir.forward;
                         }
                         else
                         {
                             PistonX.Velocity = maxMovementSpeed;
-                            xDir = Dir.forward;
                         }
                     }
                     if (xDir == Dir.movingbackward)
                     {
+                        xDir = Dir.backward;
                         if (autoMode)
                         {
                             PistonX.Velocity = -1 * maxToolSpeed;
-                            xDir = Dir.backward;
                         }
                         else
                         {
                             PistonX.Velocity = -1 * maxMovementSpeed;
-                            xDir = Dir.backward;
                         }
                     }
                 }
@@ -675,16 +683,16 @@ namespace IngameScript
                         if (xDir == Dir.forward)
                         {
                             xDir = Dir.backward;
+                            PistonX.Velocity = -1 * maxToolSpeed;
                             PistonX.Enabled = true;
                             Sensor.Enabled = true;
-                            PistonX.Velocity = -1 * maxToolSpeed;
                         }
                         else if (xDir == Dir.backward)
                         {
                             xDir = Dir.forward;
+                            PistonX.Velocity = maxToolSpeed;
                             PistonX.Enabled = true;
                             Sensor.Enabled = true;
-                            PistonX.Velocity = maxToolSpeed;
                         }
                     }
                 }
