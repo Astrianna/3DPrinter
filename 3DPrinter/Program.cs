@@ -24,6 +24,9 @@ using Sandbox.Game.WorldEnvironment.Modules;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using Sandbox.Game.Screens.Helpers;
+using Sandbox.Game.AI.Navigation;
+using System.Xml.Serialization;
+using Sandbox.Game.World.Generator;
 
 namespace IngameScript
 {
@@ -106,6 +109,7 @@ namespace IngameScript
             autoMode = ini.Get("3DPrinter", "autoMode").ToBoolean(false);
             firstRun = ini.Get("3DPrinter", "firstrun").ToBoolean(true);
             manualMove = ini.Get("3DPrinter", "manualMove").ToBoolean(false);
+            moveReady = ini.Get("3DPrinter", "moveReady").ToBoolean(true);
 
             GetBlocks();
         }
@@ -161,6 +165,7 @@ namespace IngameScript
                 _PistonZ.Enabled = true;
                 manualMove = true;
                 SaveToCustomData();
+                SensorSetup();
             }
 
             output.Clear();
@@ -173,6 +178,8 @@ namespace IngameScript
             if (argument.Equals("auto", StringComparison.OrdinalIgnoreCase)) Auto();
             if (argument.StartsWith("goto", StringComparison.OrdinalIgnoreCase)) GoTo(argument);
             if (argument.Equals("refresh", StringComparison.OrdinalIgnoreCase)) Refresh();
+            if (argument.Equals("object_detected", StringComparison.OrdinalIgnoreCase)) SensorTrigger(true);
+            if (argument.Equals("object_not_detected", StringComparison.OrdinalIgnoreCase)) SensorTrigger(false);
 
             ParseCustomData();
             if (Me.CustomData == "") SaveToCustomData();
@@ -204,7 +211,7 @@ namespace IngameScript
             if (getYPos != -1) yPos = getYPos;
             if (getZPos != -1) zPos = getZPos;
 
-            if ((int)xDir >= 6 || (int)yDir >=6 || (int)zDir >= 6) // something is currently moving, check to see if its ready to stop 
+            if ((int)xDir >= 6 || (int)yDir >= 6 || (int)zDir >= 6) // something is currently moving, check to see if its ready to stop 
             {
                 if (zDir == Dir.movingdown && _PistonZ.CurrentPosition == _PistonZ.MaxLimit || zDir == Dir.movingUp && _PistonZ.CurrentPosition == _PistonZ.MinLimit) MoveZ();
                 else if (yDir == Dir.movingRight && _PistonY.CurrentPosition == _PistonY.MinLimit || yDir == Dir.movingLeft && _PistonY.CurrentPosition == _PistonY.MaxLimit) MoveY();
@@ -246,6 +253,7 @@ namespace IngameScript
                     }
                     MoveX();
                 }
+
                 // does something need to move?
                 if (zPos != zTar) MoveZ();
                 else if (yPos != yTar) MoveY();
@@ -259,14 +267,13 @@ namespace IngameScript
                     {
                         _PistonX.Velocity = maxMovementSpeed;
                     }
-                    else if ((xPos > xTar && xPosMerge != minX) || (xPos < xTar && xPos < maxX))
+                    if (xPos < xTar ^ xTar < xPosMerge)
                     {
                         MoveX();
                     }
                 }
-
-                // build standard output for LCDs/Terminal
-                output.Append("Mode: ").Append(mode).Append("\n");
+                    // build standard output for LCDs/Terminal
+                    output.Append("Mode: ").Append(mode).Append("\n");
                 output.Append("Auto Mode: ").Append(autoMode.ToString()).Append("\n");
                 output.Append("X: ").Append(xPos).Append("\n");
                 output.Append("Y: ").Append(yPos).Append("\n");
@@ -277,14 +284,14 @@ namespace IngameScript
                 output.Append("X Direction: ").Append(xDir).Append("\n");
                 output.Append("Y Direction: ").Append(yDir).Append("\n");
                 output.Append("Z Direction: ").Append(zDir).Append("\n");
-                
+
                 Echo(output.ToString());
                 if (_Lcds.Count != 0)
                 {
                     for (int i = 0; i < _Lcds.Count; i++)
                     {
                         _Lcds[i].ContentType = ContentType.TEXT_AND_IMAGE;
-                        _Lcds[i].WriteText(output.ToString(),false);
+                        _Lcds[i].WriteText(output.ToString(), false);
                     }
                 }
 
@@ -310,6 +317,7 @@ namespace IngameScript
                 output.Append("Position changed while paused\nStarting forward\n");
                 _PistonX.Velocity = maxToolSpeed;
             }
+            SensorSetup();
         }
         public void Stop()
         {
@@ -349,7 +357,7 @@ namespace IngameScript
             manualMove = true;
             for (int i = 0; i < _Welders.Count; i++) _Welders[i].Enabled = false;
             for (int i = 0; i < _Grinders.Count; i++) _Grinders[i].Enabled = false;
-
+            SensorSetup();
         }
         public void Return()
         {
@@ -377,6 +385,7 @@ namespace IngameScript
                 for (int i = 0; i < _Grinders.Count; i++) _Grinders[i].Enabled = false;
             }
             manualMove = false;
+            SensorSetup();
         }
         public void GoTo(string argument)
         {
@@ -389,13 +398,14 @@ namespace IngameScript
                 int x, y, z;
                 if (int.TryParse(xyz[1], out x) && int.TryParse(xyz[2], out y) && int.TryParse(xyz[3], out z))
                 {
-                    if (y % 2 == 0 && x >= minX && x <= maxY && y >= minY && y <= maxY && z >= minZ && z <= maxZ)
+                    if (y % 2 == 0 && x >= minX && x <= maxX && y >= minY && y <= maxY && z >= minZ && z <= maxZ)
                     {
                         autoMode = false;
                         xTar = x;
                         yTar = y;
                         zTar = z;
                         manualMove = true;
+                        SensorSetup();
                     }
                 }
             }
@@ -409,23 +419,28 @@ namespace IngameScript
         {
 
             if (zPos == zTar && yPos == yTar && xPosMerge == zTar)
-            { 
+            {
                 if (returnAfterDone)
                 {
                     zTar = maxZ;
                     yTar = minY;
                     xTar = minX;
+                    SensorSetup();
                 }
 
-                _PistonX.Enabled = false;
-                _PistonY.Enabled = false;
-                _PistonZ.Enabled = false;
-                _Sensor.Enabled = false;
-                for (int i = 0; i < _Welders.Count; i++) _Welders[i].Enabled = false;
-                for (int i = 0; i < _Grinders.Count; i++) _Grinders[i].Enabled = false;
+                else if (!returnAfterDone || (zTar == maxZ && yTar == minY && xTar == minX))
+
+                {
+                    _PistonX.Enabled = false;
+                    _PistonY.Enabled = false;
+                    _PistonZ.Enabled = false;
+                    _Sensor.Enabled = false;
+                    for (int i = 0; i < _Welders.Count; i++) _Welders[i].Enabled = false;
+                    for (int i = 0; i < _Grinders.Count; i++) _Grinders[i].Enabled = false;
+                }
             }
             autoMode = false;
-            output.Insert(0,"Job Complete!");
+            output.Insert(0, "Job Complete!");
         }
         double GetPos(IMyShipMergeBlock _Merge) //get x, y, or z position, based on named merge blocks. Thank you, JoeTheDestroyer, for posting this in 2016.
         {
@@ -463,7 +478,6 @@ namespace IngameScript
             _PistonX.Enabled = true;
             if (xDir == Dir.forward || xDir == Dir.backward)
             {
-                _MoveConX.Enabled = true;
                 _MoveConX.Connect();
                 if (_MoveConX.Status == MyShipConnectorStatus.Connected)
                 {
@@ -489,7 +503,6 @@ namespace IngameScript
                     moveReady = true;
                     _ConnectorX.Connect();
                     _MoveConX.Disconnect();
-                    _MoveConX.Enabled = false;
                     if (xDir == Dir.movingForward)
                     {
                         xDir = Dir.forward;
@@ -628,7 +641,7 @@ namespace IngameScript
                         {
                             yDir = Dir.left;
                         }
-                        
+
                         if (xDir == Dir.forward)
                         {
                             xDir = Dir.backward;
@@ -647,6 +660,44 @@ namespace IngameScript
                 }
             }
         }
+        public void SensorTrigger(Boolean detected)
+        { 
+            if (detected)
+            {
+                _PistonX.Enabled = false;
+                _PistonY.Enabled = false;
+                _PistonZ.Enabled = false;
+            }
+            else if (!detected)
+            {
+                _PistonX.Enabled = true;
+                _PistonY.Enabled = true;
+                _PistonZ.Enabled = true;
+            }
+        }
+        public void SensorSetup()
+        {
+            if (autoMode)
+            {
+                _Sensor.LeftExtend = 1.75f;
+                _Sensor.RightExtend = 23.75f;
+                _Sensor.BottomExtend = 6.0f;
+                _Sensor.TopExtend = 1.0f;
+                _Sensor.BackExtend = 2.65f;
+                _Sensor.FrontExtend = 0.1f;
+            }
+            if (!autoMode)
+            {
+                _Sensor.LeftExtend = 3.5f;
+                _Sensor.RightExtend = 26.0f;
+                _Sensor.BottomExtend = 8.0f;
+                _Sensor.TopExtend = 1.0f;
+                _Sensor.BackExtend = 4.5f;
+                _Sensor.FrontExtend = 2.25f;
+            }
+        }
+
+
         public void ParseCustomData()
         {
             if (!customData.TryParse(Me.CustomData, out result)) throw new Exception(result.ToString());
@@ -727,6 +778,7 @@ namespace IngameScript
             ini.Set("3DPrinter", "autoMode", autoMode);
             ini.Set("3DPrinter", "firstrun", firstRun);
             ini.Set("3DPrinter", "manualMove", manualMove);
+            ini.Set("3DPrinter", "moveReady", moveReady);
 
             Storage = ini.ToString();
         }
